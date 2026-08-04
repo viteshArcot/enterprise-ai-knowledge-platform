@@ -40,6 +40,8 @@ os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("LOG_LEVEL", "WARNING")  # Suppress logs during tests
 os.environ.setdefault("LOG_FORMAT", "console")
 os.environ.setdefault("DATABASE_ECHO", "false")
+os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key")
+os.environ.setdefault("DATABASE_AUTO_CREATE", "true")
 
 # ── Clear the lru_cache so test settings take effect ─────────────────────────
 from app.config.settings import get_settings
@@ -55,7 +57,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """
     Async HTTP test client scoped to a test module.
@@ -64,8 +66,21 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     Module-scoped to reuse the client across tests in the same file,
     while still triggering lifespan events once per module.
     """
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as ac:
-        yield ac
+    try:
+        from asgi_lifespan import LifespanManager
+        async with LifespanManager(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as ac:
+                yield ac
+    except ImportError:
+        # Fallback if asgi_lifespan not installed: trigger manually
+        from app.database.engine import initialize_database, engine
+        await initialize_database()
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
+        await engine.dispose()

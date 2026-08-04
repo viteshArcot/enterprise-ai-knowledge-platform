@@ -106,13 +106,7 @@ def test_logging_configuration_supports_console_and_json(
     assert logging.getLogger().level == logging.WARNING
 
 
-@pytest.mark.asyncio
-async def test_database_dependency_is_explicitly_unavailable_in_phase_one() -> None:
-    """Routes cannot accidentally use the Phase 2 database placeholder."""
-    generator = dependencies.get_db_session()
 
-    with pytest.raises(NotImplementedError, match="not yet configured"):
-        await anext(generator)
 
 
 def test_settings_dependency_returns_configured_singleton() -> None:

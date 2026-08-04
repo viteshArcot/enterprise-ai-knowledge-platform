@@ -16,3 +16,22 @@ Usage:
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 __all__ = ["Base", "TimestampMixin", "UUIDMixin"]
+"""SQLAlchemy models registered with the Phase 2 metadata."""
+
+from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.chunk import Chunk
+from app.models.conversation import Conversation
+from app.models.document import Document, DocumentStatus
+from app.models.message import Message, MessageRole
+
+__all__ = [
+    "Base",
+    "Chunk",
+    "Conversation",
+    "Document",
+    "DocumentStatus",
+    "Message",
+    "MessageRole",
+    "TimestampMixin",
+    "UUIDMixin",
+]

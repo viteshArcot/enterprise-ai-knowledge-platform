@@ -101,6 +101,64 @@ class ValidationAppError(AppException):
         )
 
 
+class IngestionError(AppException):
+    """Raised when a document cannot be parsed or processed."""
+
+    def __init__(self, message: str, detail: dict | None = None) -> None:
+        super().__init__(
+            message=message,
+            code="INGESTION_FAILED",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=detail,
+        )
+
+
+class ProviderError(AppException):
+    """Raised when the configured Gemini provider rejects a request."""
+
+    def __init__(self, message: str, detail: dict | None = None) -> None:
+        super().__init__(
+            message=message,
+            code="PROVIDER_ERROR",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+
+class ProviderTimeoutError(AppException):
+    """Raised when a Gemini operation does not complete in time."""
+
+    def __init__(self, message: str = "The AI provider timed out.") -> None:
+        super().__init__(
+            message=message,
+            code="PROVIDER_TIMEOUT",
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+        )
+
+
+class UnsupportedFileTypeError(AppException):
+    """Raised for file extensions outside the supported Phase 2 set."""
+
+    def __init__(self, file_name: str) -> None:
+        super().__init__(
+            message=f"The file type for '{file_name}' is not supported.",
+            code="UNSUPPORTED_FILE_TYPE",
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        )
+
+
+class FileTooLargeError(AppException):
+    """Raised when an upload exceeds the configured maximum size."""
+
+    def __init__(self, maximum_bytes: int) -> None:
+        super().__init__(
+            message="The uploaded file exceeds the maximum allowed size.",
+            code="FILE_TOO_LARGE",
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={"maximum_bytes": maximum_bytes},
+        )
+
+
 # =============================================================================
 # Exception Handler Registration
 # =============================================================================

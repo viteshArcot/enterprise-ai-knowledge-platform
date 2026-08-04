@@ -1,82 +1,164 @@
-"""
-Dependency injection providers.
-
-FastAPI's Depends() system enables constructor-like DI for route handlers.
-Dependencies defined here are the canonical way to inject services, database
-sessions, and configuration into route functions.
-
-Why dependency injection?
-  - Decouples route handlers from concrete implementations
-  - Makes testing straightforward: override any dependency with a mock
-  - Makes lifecycle management explicit (open/close database sessions per request)
-  - Enables future features like rate limiting, auditing, caching as middleware
-
-Current state (Phase 1):
-  - get_db_session: Placeholder — raises NotImplementedError to signal
-    that routes needing a DB session are not yet ready.
-  - get_settings: Returns the validated settings singleton.
-
-Evolution plan:
-  Phase 2: Implement get_db_session with async SQLAlchemy session factory
-  Phase 2: Add get_document_repository, get_knowledge_base_service
-  Phase 4: Add get_current_user (JWT authentication)
-  Phase 4: Add require_permission (RBAC authorization)
-"""
+"""Dependency injection providers."""
 
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import Settings, get_settings
+from app.database.session import get_session
 
-# ---------------------------------------------------------------------------
-# Settings dependency
-# ---------------------------------------------------------------------------
+from app.repositories.document import DocumentRepository
+from app.repositories.chunk import ChunkRepository
+from app.repositories.conversation import ConversationRepository
+from app.repositories.message import MessageRepository
+
+from app.ingestion.parsers.registry import ParserRegistry
+from app.ingestion.chunking.recursive import RecursiveTokenChunker
+
+from app.providers.embedding.gemini import GeminiEmbeddingGateway
+
+# IMPORTANT
+from app.providers.llm.base import LLMGateway
+from app.providers.llm.factory import create_llm_gateway
+
+from app.services.document import DocumentService
+from app.services.search import SearchService
+from app.services.chat import ChatService
 
 
 def get_app_settings() -> Settings:
-    """
-    Dependency that returns the validated application settings.
-
-    Usage in route handlers:
-        @router.get("/example")
-        async def example(cfg: AppSettings) -> ...:
-            return {"env": cfg.ENVIRONMENT}
-    """
     return get_settings()
 
 
-# Annotated type alias — keeps route signatures clean and readable
 AppSettings = Annotated[Settings, Depends(get_app_settings)]
 
 
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    async for session in get_session():
+        yield session
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
 # ---------------------------------------------------------------------------
-# Database session dependency (Phase 2 placeholder)
+# Repositories
 # ---------------------------------------------------------------------------
 
 
-async def get_db_session() -> AsyncGenerator[None, None]:
-    """
-    Yield an async database session scoped to a single HTTP request.
+def get_document_repository(session: DbSession) -> DocumentRepository:
+    return DocumentRepository(session)
 
-    Phase 2 implementation will:
-      1. Call async_session_factory() to obtain an AsyncSession
-      2. Yield the session inside a try/finally block
-      3. Commit on success, rollback on exception
-      4. Close the session in the finally block
 
-    Example usage (Phase 2+):
-        DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+def get_chunk_repository(session: DbSession) -> ChunkRepository:
+    return ChunkRepository(session)
 
-        @router.post("/documents")
-        async def create_document(db: DbSession, ...) -> ...:
-            ...
-    """
-    raise NotImplementedError(
-        "Database session is not yet configured. "
-        "This dependency will be implemented in Phase 2 when the "
-        "SQLAlchemy async engine and session factory are set up. "
-        "See docs/03-development-roadmap.md for the Phase 2 plan."
+
+def get_conversation_repository(session: DbSession) -> ConversationRepository:
+    return ConversationRepository(session)
+
+
+def get_message_repository(session: DbSession) -> MessageRepository:
+    return MessageRepository(session)
+
+
+# ---------------------------------------------------------------------------
+# Ingestion
+# ---------------------------------------------------------------------------
+
+
+def get_parser_registry() -> ParserRegistry:
+    return ParserRegistry()
+
+
+def get_recursive_chunker(settings: AppSettings) -> RecursiveTokenChunker:
+    return RecursiveTokenChunker(
+        chunk_size=512,
+        overlap=64,
+        encoding_name="cl100k_base",
     )
-    yield
+
+
+# ---------------------------------------------------------------------------
+# Providers
+# ---------------------------------------------------------------------------
+
+
+def get_embedding_gateway(settings: AppSettings) -> GeminiEmbeddingGateway:
+    """
+    Embeddings always use Gemini in Phase 2.
+    """
+    return GeminiEmbeddingGateway(config=settings)
+
+
+def get_llm_gateway(settings: AppSettings) -> LLMGateway:
+    """
+    Chat provider is selected from LLM_PROVIDER.
+    """
+    return create_llm_gateway(settings)
+
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+
+
+def get_document_service(
+    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    chunk_repo: Annotated[ChunkRepository, Depends(get_chunk_repository)],
+    parser_registry: Annotated[ParserRegistry, Depends(get_parser_registry)],
+    chunker: Annotated[RecursiveTokenChunker, Depends(get_recursive_chunker)],
+    embedding_gateway: Annotated[
+        GeminiEmbeddingGateway,
+        Depends(get_embedding_gateway),
+    ],
+) -> DocumentService:
+    return DocumentService(
+        document_repo=document_repo,
+        chunk_repo=chunk_repo,
+        parser_registry=parser_registry,
+        chunker=chunker,
+        embedding_gateway=embedding_gateway,
+    )
+
+
+def get_search_service(
+    chunk_repo: Annotated[ChunkRepository, Depends(get_chunk_repository)],
+    embedding_gateway: Annotated[
+        GeminiEmbeddingGateway,
+        Depends(get_embedding_gateway),
+    ],
+) -> SearchService:
+    return SearchService(
+        chunk_repo=chunk_repo,
+        embedding_gateway=embedding_gateway,
+        default_top_k=5,
+    )
+
+
+def get_chat_service(
+    conversation_repo: Annotated[
+        ConversationRepository,
+        Depends(get_conversation_repository),
+    ],
+    message_repo: Annotated[
+        MessageRepository,
+        Depends(get_message_repository),
+    ],
+    search_service: Annotated[
+        SearchService,
+        Depends(get_search_service),
+    ],
+    llm_gateway: Annotated[
+        LLMGateway,
+        Depends(get_llm_gateway),
+    ],
+) -> ChatService:
+    return ChatService(
+        conversation_repo=conversation_repo,
+        message_repo=message_repo,
+        search_service=search_service,
+        llm_gateway=llm_gateway,
+    )

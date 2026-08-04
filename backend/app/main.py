@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_v1_router
 from app.config.settings import settings
+from app.database.engine import dispose_engine, initialize_database
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # ── Startup ──────────────────────────────────────────────────────────────
     configure_logging()
+    await initialize_database()
 
     logger.info(
         "application_startup",
@@ -73,6 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────────────────
+    await dispose_engine()
     logger.info("application_shutdown")
 
 

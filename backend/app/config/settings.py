@@ -58,11 +58,11 @@ class Settings(BaseSettings):
     # Shown in the OpenAPI /docs description area
     API_DESCRIPTION: str = (
         "Production-grade API for enterprise AI-powered knowledge management. "
-        "Phase 1: Engineering Foundation."
+        "Phase 2: Document ingestion, semantic retrieval, and Gemini-powered chat."
     )
 
     # Follows semantic versioning. Increment on breaking changes.
-    API_VERSION: str = "0.1.0"
+    API_VERSION: str = "0.2.0"
 
     # =========================================================================
     # Deployment environment
@@ -116,6 +116,29 @@ class Settings(BaseSettings):
     # WARNING: Leaks sensitive data if enabled in production.
     DATABASE_ECHO: bool = False
 
+    DATABASE_AUTO_CREATE: bool = True
+    DATABASE_HEALTHCHECK_ENABLED: bool = True
+
+    UPLOAD_DIRECTORY: Path = REPOSITORY_ROOT / "backend" / "uploads"
+    MAX_UPLOAD_SIZE_BYTES: int = Field(default=50 * 1024 * 1024, ge=1)
+    CHUNK_SIZE_TOKENS: int = Field(default=512, ge=64, le=2048)
+    CHUNK_OVERLAP_TOKENS: int = Field(default=64, ge=0, le=512)
+    TOKENIZER_ENCODING: str = "cl100k_base"
+
+    LLM_PROVIDER: Literal["gemini", "openrouter", "ollama"] = "gemini"
+    GEMINI_API_KEY: str | None = None
+    OPENROUTER_API_KEY: str | None = None
+    OPENROUTER_MODEL: str = "openai/gpt-4.1"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    GEMINI_CHAT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_EMBEDDING_DIMENSIONS: int = Field(default=768, ge=1)
+    GEMINI_TIMEOUT_SECONDS: int = Field(default=60, ge=1, le=120)
+    GEMINI_MAX_RETRIES: int = Field(default=3, ge=0, le=5)
+    SEARCH_DEFAULT_TOP_K: int = Field(default=5, ge=1, le=20)
+    PROMPT_MAX_TOKENS: int = Field(default=8192, ge=1024)
+
     # =========================================================================
     # Logging
     # =========================================================================
@@ -160,6 +183,8 @@ class Settings(BaseSettings):
         """Enforce the documented production safety constraint for DEBUG."""
         if self.ENVIRONMENT == "production" and self.DEBUG:
             raise ValueError("DEBUG must be false when ENVIRONMENT is production.")
+        if self.CHUNK_OVERLAP_TOKENS >= self.CHUNK_SIZE_TOKENS:
+            raise ValueError("CHUNK_OVERLAP_TOKENS must be smaller than CHUNK_SIZE_TOKENS.")
         return self
 
 

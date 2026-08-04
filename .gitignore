@@ -183,3 +183,7 @@ $RECYCLE.BIN/
 *.temp
 tmp/
 temp/
+
+# Phase 2 local document storage
+backend/uploads/*
+!backend/uploads/.gitkeep

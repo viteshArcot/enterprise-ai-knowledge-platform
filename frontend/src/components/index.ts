@@ -2,4 +2,6 @@
  * Components barrel export.
  */
 
-export { StatusCard } from './StatusCard';
+export * from './StatusCard';
+export * from './Layout';
+export * from './Sidebar';

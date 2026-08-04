@@ -10,9 +10,8 @@
 -- Enable UUID generation (used for primary keys)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Enable vector storage for embeddings (Phase 3: pgvector)
--- Uncomment when pgvector is installed in the PostgreSQL image:
--- CREATE EXTENSION IF NOT EXISTS "vector";
+-- Enable vector storage for Phase 2 embeddings.
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ---------------------------------------------------------------------------
 -- Application role (principle of least privilege)

@@ -34,9 +34,6 @@ api_v1_router.include_router(
     tags=["Health"],
 )
 
-# Phase 2: Uncomment as features are implemented
-# from app.api.v1.endpoints import documents, knowledge_bases
-# api_v1_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
-# api_v1_router.include_router(
-#     knowledge_bases.router, prefix="/knowledge-bases", tags=["Knowledge Bases"]
-# )
+from app.api.v1.endpoints import documents, chat
+api_v1_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
+api_v1_router.include_router(chat.router, prefix="/conversations", tags=["Chat"])

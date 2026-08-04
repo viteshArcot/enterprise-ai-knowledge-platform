@@ -1,107 +1,110 @@
-/**
- * Home page — Phase 1 platform dashboard.
- *
- * Displays the API health status to confirm frontend ↔ backend connectivity.
- * This page will become the authenticated dashboard entry point in Phase 4.
- */
-
+import { useState, useEffect } from 'react';
 import type { FC } from 'react';
-import { StatusCard } from '../components';
-import { useHealth } from '../hooks';
+import { Server, Database, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { apiClient } from '../services/api';
+import './Home.css';
+
+interface HealthStatus {
+  status: string;
+  version: string;
+  environment: string;
+}
+
+interface ReadinessStatus {
+  status: string;
+  database: string;
+  redis: string;
+}
 
 export const Home: FC = () => {
-  const { data, error, loading, refetch } = useHealth();
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [readiness, setReadiness] = useState<ReadinessStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  const apiStatus = loading
-    ? 'loading'
-    : error
-      ? 'unhealthy'
-      : data?.status === 'healthy'
-        ? 'healthy'
-        : 'degraded';
+  const checkStatus = async () => {
+    try {
+      const [healthData, readinessData] = await Promise.all([
+        apiClient.get<HealthStatus>('/api/v1/health/'),
+        apiClient.get<ReadinessStatus>('/api/v1/health/ready')
+      ]);
+      setHealth(healthData);
+      setReadiness(readinessData);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Health check failed', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000); // 30s polling
+    return () => clearInterval(interval);
+  }, []);
+
+  const StatusIcon = ({ status }: { status?: string }) => {
+    if (!status) return <Clock className="text-muted spin" size={24} />;
+    return status === 'ok' ? (
+      <CheckCircle className="text-success" size={24} />
+    ) : (
+      <XCircle className="text-error" size={24} />
+    );
+  };
 
   return (
-    <div className="page">
-      {/* Hero */}
-      <div className="hero">
-        <div className="hero-badge">Phase 1 · Engineering Foundation</div>
-        <h1 className="hero-title">
-          Enterprise AI
-          <br />
-          <span className="gradient-text">Knowledge Platform</span>
-        </h1>
-        <p className="hero-subtitle">
-          Production-grade AI knowledge management infrastructure built with FastAPI, React, and
-          PostgreSQL.
-        </p>
+    <div className="status-page animate-fade-in">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">System Status</h1>
+          <p className="page-subtitle">Real-time health of the Enterprise AI platform components.</p>
+        </div>
+        <div className="last-updated">
+          <Clock size={16} />
+          <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
+        </div>
       </div>
 
-      {/* Status panel */}
-      <div className="card">
-        <div className="card-header">
-          <h2>System Status</h2>
-          <button
-            onClick={refetch}
-            className="btn-ghost"
-            disabled={loading}
-            aria-label="Refresh status"
-          >
-            {loading ? '↻' : '↺'} Refresh
-          </button>
-        </div>
-
-        <StatusCard
-          label="Backend API"
-          status={apiStatus}
-          detail={
-            data
-              ? `v${data.version} · ${data.environment} · up ${data.uptime_seconds}s`
-              : (error ?? 'Connecting…')
-          }
-        />
-        <StatusCard label="Frontend" status="healthy" detail="React 19 · TypeScript · Vite 8" />
-      </div>
-
-      {/* Tech stack */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Technology Stack</h2>
-        </div>
-        <div className="stack-grid">
-          {[
-            { layer: 'API', tech: 'FastAPI + Python 3.12' },
-            { layer: 'Database', tech: 'PostgreSQL 16 + SQLAlchemy 2' },
-            { layer: 'Frontend', tech: 'React 19 + TypeScript + Vite 8' },
-            { layer: 'Config', tech: 'Pydantic Settings v2' },
-            { layer: 'Logging', tech: 'Structlog (JSON)' },
-            { layer: 'Container', tech: 'Docker + Compose' },
-          ].map(({ layer, tech }) => (
-            <div key={layer} className="stack-item">
-              <span className="stack-layer">{layer}</span>
-              <span className="stack-tech">{tech}</span>
+      <div className="status-grid">
+        <div className="status-card card">
+          <div className="status-card-header">
+            <div className="status-card-icon bg-primary-light">
+              <Server className="text-primary" size={24} />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Roadmap pills */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Development Roadmap</h2>
-        </div>
-        <div className="roadmap">
-          {[
-            { phase: 'Phase 1', label: 'Engineering Foundation', done: true },
-            { phase: 'Phase 2', label: 'Document Ingestion + Storage', done: false },
-            { phase: 'Phase 3', label: 'RAG Pipeline + Semantic Search', done: false },
-            { phase: 'Phase 4', label: 'Authentication + Multi-tenancy', done: false },
-          ].map(({ phase, label, done }) => (
-            <div key={phase} className={`roadmap-item ${done ? 'done' : ''}`}>
-              <span className="roadmap-phase">{phase}</span>
-              <span className="roadmap-label">{label}</span>
-              {done && <span className="roadmap-badge">✓ Complete</span>}
+            <StatusIcon status={health?.status} />
+          </div>
+          <h3>API Gateway</h3>
+          <p className="text-muted">Main FastAPI Backend Service</p>
+          <div className="status-details">
+            <div className="detail-row">
+              <span>Version</span>
+              <span className="font-medium">{health?.version || '...'}</span>
             </div>
-          ))}
+            <div className="detail-row">
+              <span>Environment</span>
+              <span className="font-medium capitalize">{health?.environment || '...'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="status-card card">
+          <div className="status-card-header">
+            <div className="status-card-icon bg-success-light">
+              <Database className="text-success" size={24} />
+            </div>
+            <StatusIcon status={readiness?.database} />
+          </div>
+          <h3>Vector Database</h3>
+          <p className="text-muted">PostgreSQL with pgvector</p>
+          <div className="status-details">
+            <div className="detail-row">
+              <span>Connection</span>
+              <span className={`font-medium ${readiness?.database === 'ok' ? 'text-success' : 'text-error'}`}>
+                {readiness?.database === 'ok' ? 'Connected' : (loading ? 'Checking...' : 'Disconnected')}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,216 @@
+.documents-page {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text);
+}
+
+.page-header p {
+  color: var(--color-text-secondary);
+}
+
+.upload-box {
+  display: flex;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.page-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.page-subtitle {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+/* Drag & Drop Zone */
+.upload-dropzone {
+  border: 2px dashed var(--border-color);
+  background-color: var(--bg-surface);
+  transition: all var(--transition-normal);
+  cursor: pointer;
+  text-align: center;
+  padding: 3rem 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-dropzone:hover {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+}
+
+.upload-dropzone.drag-active {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+  transform: scale(1.01);
+}
+
+.upload-dropzone.uploading {
+  cursor: default;
+  border-style: solid;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.upload-icon-wrapper {
+  background-color: var(--primary-light);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.upload-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.hidden-input {
+  display: none;
+}
+
+/* Progress Bar */
+.upload-progress-container {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.progress-bar-wrapper {
+  width: 100%;
+  height: 6px;
+  background-color: var(--border-light);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--primary-color);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Error Banner */
+.error-banner {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: var(--error-bg);
+  color: var(--error);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Document List */
+.documents-container {
+  min-height: 400px;
+}
+
+.document-count {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background-color: var(--bg-surface-hover);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  margin: 0 -1.5rem;
+  padding: 0 1.5rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.data-table th {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-table td {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: middle;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-badge {
+  text-transform: capitalize;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-ready { color: var(--color-success); }
+.status-processing, .status-uploading { color: var(--color-warning); }
+.status-failed { color: var(--color-error); }
+
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+.text-muted { color: var(--color-text-tertiary); }
+.font-medium { font-weight: 500; }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-tertiary);
+}
+
+.empty-state p {
+  margin-top: 1rem;
+}
