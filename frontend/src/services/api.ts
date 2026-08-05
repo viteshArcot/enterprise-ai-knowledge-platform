@@ -71,6 +71,22 @@ export const apiClient = {
     });
   },
 
+  patch: <T>(path: string, body: unknown, options?: RequestInit) => {
+    const isFormData = body instanceof FormData;
+    const headers = new Headers(options?.headers);
+    
+    if (!isFormData && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    return request<T>(path, {
+      method: 'PATCH',
+      body: isFormData ? (body as FormData) : JSON.stringify(body),
+      headers,
+      ...options,
+    });
+  },
+
   put: <T>(path: string, body: unknown, options?: RequestInit) => {
     const isFormData = body instanceof FormData;
     const headers = new Headers(options?.headers);

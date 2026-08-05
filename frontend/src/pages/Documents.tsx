@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FC } from 'react';
-import { UploadCloud, FileText, CheckCircle2, AlertCircle, FilePlus, Loader2 } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertCircle, FilePlus, Loader2, Database, Eye, Download, Trash2 } from 'lucide-react';
 import { apiClient } from '../services/api';
+import toast from 'react-hot-toast';
 import './Documents.css';
 
 interface Document {
@@ -18,7 +19,6 @@ export const Documents: FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,18 +30,17 @@ export const Documents: FC = () => {
       setDocuments(data);
     } catch (err) {
       console.error('Failed to fetch documents', err);
-      if (!background) setError('Failed to load documents.');
+      if (!background) toast.error('Failed to load documents');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
 
-  // Intelligent polling: only poll if there are documents still uploading/processing
+  // Intelligent polling
   useEffect(() => {
     const pendingDocs = documents.some(
       (doc) => doc.status === 'uploading' || doc.status === 'processing'
@@ -57,7 +56,6 @@ export const Documents: FC = () => {
     if (!file) return;
 
     setIsUploading(true);
-    setError(null);
     setUploadProgress(10); // Fake immediate progress
 
     const formData = new FormData();
@@ -65,7 +63,6 @@ export const Documents: FC = () => {
     formData.append('title', file.name);
 
     try {
-      // Fake progress for UX
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => (prev >= 90 ? 90 : prev + 10));
       }, 300);
@@ -74,16 +71,16 @@ export const Documents: FC = () => {
       
       clearInterval(progressInterval);
       setUploadProgress(100);
+      toast.success('Document uploaded successfully');
       
-      // Give the 100% state a moment to render before refreshing
       setTimeout(() => {
         setUploadProgress(0);
         setIsUploading(false);
         fetchDocuments(true);
       }, 500);
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+    } catch (err: any) {
+      toast.error(err.message || 'Upload failed');
       setIsUploading(false);
       setUploadProgress(0);
     }
@@ -152,9 +149,11 @@ export const Documents: FC = () => {
       >
         <div className="upload-content">
           {isUploading ? (
-            <div className="upload-progress-container">
-              <Loader2 size={40} className="upload-icon spin text-primary" />
-              <h3>Uploading Document...</h3>
+            <div className="upload-progress-container animate-fade-in">
+              <div className="upload-spinner-wrapper">
+                <Loader2 size={48} className="upload-icon spin text-primary" />
+              </div>
+              <h3 className="upload-progress-title">Uploading Document...</h3>
               <div className="progress-bar-wrapper">
                 <div className="progress-bar" style={{ width: `${uploadProgress}%` }}></div>
               </div>
@@ -165,7 +164,7 @@ export const Documents: FC = () => {
               <div className="upload-icon-wrapper">
                 <UploadCloud size={32} className="text-primary" />
               </div>
-              <h3>Click or drag file to this area to upload</h3>
+              <h3 className="upload-title">Click or drag file to this area to upload</h3>
               <p className="upload-hint">Support for PDF, DOCX, TXT, and Markdown files.</p>
             </>
           )}
@@ -184,65 +183,100 @@ export const Documents: FC = () => {
         </div>
       </div>
 
-      {error && (
-        <div className="error-banner animate-fade-in">
-          <AlertCircle size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="documents-container card mt-6">
-        <div className="card-header">
+      <div className="documents-container mt-6">
+        <div className="documents-header">
           <h2>Indexed Documents</h2>
           <span className="document-count">{documents.length} files</span>
         </div>
         
-        {isLoading && documents.length === 0 ? (
-          <div className="skeleton-container">
-            {[1, 2, 3].map(i => <div key={i} className="skeleton-row"></div>)}
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <FilePlus size={32} className="text-muted" />
+        <div className="card documents-card">
+          {isLoading && documents.length === 0 ? (
+            <div className="skeleton-container">
+              {[1, 2, 3].map(i => <div key={i} className="skeleton-row"></div>)}
             </div>
-            <h3>No documents found</h3>
-            <p className="text-muted">Upload your first document above to start building your knowledge base.</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Status</th>
-                  <th>Chunks</th>
-                  <th>Date Added</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc) => (
-                  <tr key={doc.id}>
-                    <td>
-                      <div className="doc-title-cell">
-                        <FileText size={16} className="text-muted" />
-                        <span className="font-medium truncate" title={doc.title}>{doc.title}</span>
-                      </div>
-                    </td>
-                    <td>{getStatusDisplay(doc.status, doc.error_message)}</td>
-                    <td className="text-muted">{doc.chunk_count ?? '-'}</td>
-                    <td className="text-muted text-sm">
-                      {new Date(doc.created_at).toLocaleDateString(undefined, { 
-                        year: 'numeric', month: 'short', day: 'numeric', 
-                        hour: '2-digit', minute: '2-digit'
-                      })}
-                    </td>
+          ) : documents.length === 0 ? (
+            <div className="empty-state animate-fade-in">
+              <div className="empty-state-icon">
+                <FilePlus size={48} className="text-muted" />
+              </div>
+              <h3>No documents found</h3>
+              <p className="text-muted">Upload your first document above to start building your knowledge base.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Document Name</th>
+                    <th>Status</th>
+                    <th>Indexed Chunks</th>
+                    <th>Date Added</th>
+                    <th className="text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="animate-fade-in">
+                      <td>
+                        <div className="doc-title-cell">
+                          <FileText size={18} className="doc-icon" />
+                          <span className="font-medium truncate" title={doc.title}>{doc.title}</span>
+                        </div>
+                      </td>
+                      <td>{getStatusDisplay(doc.status, doc.error_message)}</td>
+                      <td>
+                        <div className="chunk-cell">
+                          <Database size={14} className="text-muted" />
+                          <span className="text-muted">{doc.chunk_count ?? '-'}</span>
+                        </div>
+                      </td>
+                      <td className="text-muted text-sm">
+                        {new Date(doc.created_at).toLocaleDateString(undefined, { 
+                          year: 'numeric', month: 'short', day: 'numeric', 
+                          hour: '2-digit', minute: '2-digit'
+                        })}
+                      </td>
+                      <td className="text-right doc-actions">
+                        {doc.file_name?.toLowerCase().endsWith('.pdf') ? (
+                          <button 
+                            className="btn-icon" 
+                            title="Preview PDF" 
+                            onClick={() => window.open(`/api/v1/documents/${doc.id}/download`, '_blank')}
+                          >
+                            <Eye size={16} />
+                          </button>
+                        ) : null}
+                        <button 
+                          className="btn-icon" 
+                          title="Download" 
+                          onClick={() => window.location.href = `/api/v1/documents/${doc.id}/download`}
+                        >
+                          <Download size={16} />
+                        </button>
+                        <button 
+                          className="btn-icon text-danger" 
+                          title="Delete" 
+                          onClick={async () => {
+                            if (!window.confirm('Are you sure you want to delete this document?')) return;
+                            try {
+                              await apiClient.delete(`/api/v1/documents/${doc.id}`);
+                              setDocuments(prev => prev.filter(d => d.id !== doc.id));
+                              toast.success('Document deleted');
+                            } catch (err) {
+                              toast.error('Failed to delete document');
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
