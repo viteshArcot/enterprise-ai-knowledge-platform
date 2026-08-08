@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.dependencies import get_document_service
 from app.schemas.document import DocumentResponse
 from app.services.document import DocumentService
+from app.config.settings import settings
 
 router = APIRouter()
 
@@ -38,6 +39,11 @@ async def upload_document(
             sha256_hash.update(chunk)
             f.write(chunk)
             file_size += len(chunk)
+            if file_size > settings.MAX_UPLOAD_SIZE_BYTES:
+                f.close()
+                os.remove(file_path)
+                from app.core.exceptions import FileTooLargeError
+                raise FileTooLargeError(settings.MAX_UPLOAD_SIZE_BYTES)
             
     file_hash = sha256_hash.hexdigest()
 

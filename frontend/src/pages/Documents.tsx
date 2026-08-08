@@ -55,6 +55,12 @@ export const Documents: FC = () => {
   const handleFile = async (file: File) => {
     if (!file) return;
 
+    // 100MB limit
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('Document too large. Maximum size is 100MB.');
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(10); // Fake immediate progress
 

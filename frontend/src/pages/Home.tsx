@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
-import { Server, Database, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Server, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { apiClient } from '../services/api';
 import './Home.css';
 
@@ -10,31 +10,19 @@ interface HealthStatus {
   environment: string;
 }
 
-interface ReadinessStatus {
-  status: string;
-  database: string;
-  redis: string;
-}
+
 
 export const Home: FC = () => {
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [readiness, setReadiness] = useState<ReadinessStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const checkStatus = async () => {
     try {
-      const [healthData, readinessData] = await Promise.all([
-        apiClient.get<HealthStatus>('/api/v1/health/'),
-        apiClient.get<ReadinessStatus>('/api/v1/health/ready')
-      ]);
+      const healthData = await apiClient.get<HealthStatus>('/api/v1/health');
       setHealth(healthData);
-      setReadiness(readinessData);
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Health check failed', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -46,7 +34,7 @@ export const Home: FC = () => {
 
   const StatusIcon = ({ status }: { status?: string }) => {
     if (!status) return <Clock className="text-muted spin" size={24} />;
-    return status === 'ok' ? (
+    return status === 'healthy' ? (
       <CheckCircle className="text-success" size={24} />
     ) : (
       <XCircle className="text-error" size={24} />
@@ -85,24 +73,9 @@ export const Home: FC = () => {
               <span>Environment</span>
               <span className="font-medium capitalize">{health?.environment || '...'}</span>
             </div>
-          </div>
-        </div>
-
-        <div className="status-card card">
-          <div className="status-card-header">
-            <div className="status-card-icon bg-success-light">
-              <Database className="text-success" size={24} />
-            </div>
-            <StatusIcon status={readiness?.database} />
-          </div>
-          <h3>Vector Database</h3>
-          <p className="text-muted">PostgreSQL with pgvector</p>
-          <div className="status-details">
             <div className="detail-row">
-              <span>Connection</span>
-              <span className={`font-medium ${readiness?.database === 'ok' ? 'text-success' : 'text-error'}`}>
-                {readiness?.database === 'ok' ? 'Connected' : (loading ? 'Checking...' : 'Disconnected')}
-              </span>
+              <span>Status</span>
+              <span className="font-medium capitalize">{health?.status || '...'}</span>
             </div>
           </div>
         </div>

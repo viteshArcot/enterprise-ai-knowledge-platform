@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     DATABASE_HEALTHCHECK_ENABLED: bool = True
 
     UPLOAD_DIRECTORY: Path = REPOSITORY_ROOT / "backend" / "uploads"
-    MAX_UPLOAD_SIZE_BYTES: int = Field(default=50 * 1024 * 1024, ge=1)
+    MAX_UPLOAD_SIZE_BYTES: int = Field(default=100 * 1024 * 1024, ge=1)
     CHUNK_SIZE_TOKENS: int = Field(default=512, ge=64, le=2048)
     CHUNK_OVERLAP_TOKENS: int = Field(default=64, ge=0, le=512)
     TOKENIZER_ENCODING: str = "cl100k_base"

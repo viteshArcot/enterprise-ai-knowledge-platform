@@ -5,9 +5,10 @@ from collections.abc import AsyncIterator
 
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 from app.config.settings import Settings
-from app.core.exceptions import ProviderError, ProviderTimeoutError
+from app.core.exceptions import ProviderError, ProviderTimeoutError, ProviderFatalError, ProviderRetryableError
 from app.providers.llm.base import LLMGateway, PromptMessage
 
 
@@ -53,7 +54,12 @@ class GeminiLLMGateway(LLMGateway):
             except TimeoutError as exc:
                 if emitted or attempt == self._retries:
                     raise ProviderTimeoutError() from exc
+            except APIError as exc:
+                if exc.code in (400, 401, 403):
+                    raise ProviderFatalError(f"Gemini rejected the request (Status {exc.code}): {exc.message}") from exc
+                if emitted or attempt == self._retries:
+                    raise ProviderRetryableError(f"Gemini API Error (Status {exc.code}): {exc.message}") from exc
             except Exception as exc:
                 if emitted or attempt == self._retries:
-                    raise ProviderError("Gemini chat request failed.") from exc
+                    raise ProviderRetryableError("Gemini chat request failed.") from exc
             await asyncio.sleep(2**attempt)

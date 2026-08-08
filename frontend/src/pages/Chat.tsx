@@ -101,10 +101,10 @@ const MessageItem = memo(({
         </div>
         <div className="message-content">
           <div className="message-header">
-            <span className="message-author">AI Assistant</span>
+            <span className="message-author">Nova</span>
           </div>
           <div className="message-bubble typing-indicator">
-            <span></span><span></span><span></span>
+            Thinking<span className="dot">.</span><span className="dot">.</span><span className="dot">.</span>
           </div>
         </div>
       </div>
@@ -123,7 +123,7 @@ const MessageItem = memo(({
       </div>
       <div className="message-content">
         <div className="message-header">
-          <span className="message-author">{isUser ? 'You' : 'AI Assistant'}</span>
+          <span className="message-author">{isUser ? 'You' : 'Nova'}</span>
           {timeString && <span className="message-time">{timeString}</span>}
         </div>
         <div className={`message-bubble ${isLast && isGenerating ? 'streaming' : ''}`}>

@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.config.settings import Settings
-from app.core.exceptions import ProviderError, ProviderTimeoutError
+from app.core.exceptions import ProviderError, ProviderTimeoutError, ProviderFatalError, ProviderRetryableError
 from app.providers.llm.base import LLMGateway, PromptMessage
 
 
@@ -67,5 +67,10 @@ class OpenRouterLLMGateway(LLMGateway):
                                 pass
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError() from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in (400, 401, 403):
+                raise ProviderFatalError(f"OpenRouter rejected the request (Status {status})") from exc
+            raise ProviderRetryableError(f"OpenRouter API Error (Status {status})") from exc
         except Exception as exc:
-            raise ProviderError(f"OpenRouter chat request failed: {str(exc)}") from exc
+            raise ProviderRetryableError(f"OpenRouter chat request failed: {str(exc)}") from exc

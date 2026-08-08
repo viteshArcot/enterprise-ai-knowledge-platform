@@ -125,15 +125,31 @@ class ProviderError(AppException):
         )
 
 
-class ProviderTimeoutError(AppException):
-    """Raised when a Gemini operation does not complete in time."""
-
-    def __init__(self, message: str = "The AI provider timed out.") -> None:
+class ProviderRetryableError(ProviderError):
+    """Raised for 429, 5xx, timeout, quota exceeded, network failures. Should be retried on next provider."""
+    def __init__(self, message: str = "The AI provider is temporarily unavailable.") -> None:
         super().__init__(
             message=message,
-            code="PROVIDER_TIMEOUT",
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail={"retryable": True}
         )
+
+
+class ProviderFatalError(ProviderError):
+    """Raised for 400, 401, 403, invalid prompt, etc. Should NOT be retried."""
+    def __init__(self, message: str = "The AI provider rejected the request.") -> None:
+        super().__init__(
+            message=message,
+            detail={"retryable": False}
+        )
+
+
+class ProviderTimeoutError(ProviderRetryableError):
+    """Raised when a provider operation does not complete in time."""
+
+    def __init__(self, message: str = "The AI provider timed out.") -> None:
+        super().__init__(message=message)
+        self.code = "PROVIDER_TIMEOUT"
+        self.status_code = status.HTTP_504_GATEWAY_TIMEOUT
 
 
 class UnsupportedFileTypeError(AppException):
