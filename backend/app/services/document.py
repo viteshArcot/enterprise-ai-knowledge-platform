@@ -74,30 +74,82 @@ class DocumentService(BaseService):
             parsed_doc = parser.parse(content, file_name)
 
             # 2. Chunking
-            text_chunks = self._chunker.chunk(parsed_doc.text)
-            if not text_chunks:
-                raise IngestionError("Document produced no text chunks after parsing.")
+            chunks_to_persist = []
+            chunk_index = 0
+
+            if getattr(parsed_doc, "pages", None):
+                for page in parsed_doc.pages:
+                    # Text chunks for this page
+                    if page.text.strip():
+                        text_chunks = self._chunker.chunk(page.text, start_index=chunk_index, page_number=page.page_number)
+                        for tc in text_chunks:
+                            chunks_to_persist.append(
+                                ChunkCreate(
+                                    document_id=document_id,
+                                    content=tc.content,
+                                    chunk_index=tc.chunk_index,
+                                    token_count=tc.token_count,
+                                    char_count=tc.char_count,
+                                    page_number=tc.page_number,
+                                    metadata_={"source_type": "text"},
+                                )
+                            )
+                        chunk_index += len(text_chunks)
+                    
+                    # Visual representation for this page
+                    if page.image_base64:
+                        chunks_to_persist.append(
+                            ChunkCreate(
+                                document_id=document_id,
+                                content=f"[Visual representation of {file_name}, page {page.page_number}]",
+                                chunk_index=chunk_index,
+                                token_count=0,
+                                char_count=0,
+                                page_number=page.page_number,
+                                metadata_={"source_type": "visual", "image_base64": page.image_base64},
+                            )
+                        )
+                        chunk_index += 1
+            else:
+                # Fallback for parsers without pages
+                text_chunks = self._chunker.chunk(parsed_doc.text)
+                for tc in text_chunks:
+                    chunks_to_persist.append(
+                        ChunkCreate(
+                            document_id=document_id,
+                            content=tc.content,
+                            chunk_index=tc.chunk_index,
+                            token_count=tc.token_count,
+                            char_count=tc.char_count,
+                            page_number=None,
+                            metadata_={"source_type": "text"},
+                        )
+                    )
+
+            if not chunks_to_persist:
+                raise IngestionError("Document produced no chunks after parsing.")
 
             # 3. Embedding (Batched within the gateway)
-            texts_to_embed = [tc.content for tc in text_chunks]
-            embeddings = await self._embedding_gateway.embed(texts_to_embed)
+            inputs_to_embed = []
+            for chunk_create in chunks_to_persist:
+                if chunk_create.metadata_.get("source_type") == "visual":
+                    inputs_to_embed.append([
+                        {"type": "text", "text": f"Document: {file_name}, Page: {chunk_create.page_number}"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{chunk_create.metadata_['image_base64']}"}}
+                    ])
+                else:
+                    inputs_to_embed.append(chunk_create.content)
+            
+            embeddings = await self._embedding_gateway.embed(inputs_to_embed)
 
             # 4. Persistence
-            chunk_creates = []
-            for tc, embedding in zip(text_chunks, embeddings, strict=True):
-                chunk_creates.append(
-                    ChunkCreate(
-                        document_id=document_id,
-                        content=tc.content,
-                        chunk_index=tc.chunk_index,
-                        token_count=tc.token_count,
-                        char_count=tc.char_count,
-                        embedding=embedding,
-                        metadata_=parsed_doc.metadata,
-                    )
-                )
+            for chunk_create, embedding in zip(chunks_to_persist, embeddings, strict=True):
+                chunk_create.embedding = embedding
+                # Drop large base64 image data before DB persistence
+                if "image_base64" in chunk_create.metadata_:
+                    del chunk_create.metadata_["image_base64"]
 
-            await self._chunk_repo.create_many(chunk_creates)
+            await self._chunk_repo.create_many(chunks_to_persist)
 
             # 5. Finalize Document
             # Retrieve the document again to get current metadata
@@ -108,7 +160,7 @@ class DocumentService(BaseService):
                 document_id,
                 DocumentUpdate(
                     status=DocumentStatus.READY,
-                    chunk_count=len(chunk_creates),
+                    chunk_count=len(chunks_to_persist),
                     metadata_={**current_metadata, **parsed_doc.metadata},
                 ),
             )
@@ -116,7 +168,7 @@ class DocumentService(BaseService):
             self._logger.info(
                 "document_processing_complete",
                 document_id=str(document_id),
-                chunk_count=len(chunk_creates),
+                chunk_count=len(chunks_to_persist),
             )
 
         except Exception as exc:
@@ -145,13 +197,20 @@ class DocumentService(BaseService):
             self._logger.info("document_delete_skipped_not_found", document_id=str(document_id))
             return
             
+        from app.config.settings import settings
+        import os
+        
         file_path = doc.file_path
         
+        if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
+            fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
+            if os.path.exists(fallback_path):
+                file_path = fallback_path
+                
         success = await self._document_repo.delete(document_id)
         if success:
             await self._document_repo._session.commit()
             
-            import os
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
                 

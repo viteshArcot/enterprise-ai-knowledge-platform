@@ -25,11 +25,13 @@ async def upload_document(
     document_service: DocumentService = Depends(get_document_service),
 ):
     """Upload a document to be ingested."""
-    # Ensure a directory exists for temporary storage (local for now)
-    upload_dir = "/tmp/uploads"
+    # Ensure a directory exists for storage
+    upload_dir = str(settings.UPLOAD_DIRECTORY)
     os.makedirs(upload_dir, exist_ok=True)
     
-    file_path = os.path.join(upload_dir, file.filename or "unknown")
+    import uuid
+    safe_filename = f"{uuid.uuid4().hex}_{file.filename or 'unknown'}"
+    file_path = os.path.join(upload_dir, safe_filename)
     
     # Compute SHA256 incrementally and save the file
     sha256_hash = hashlib.sha256()
@@ -41,7 +43,10 @@ async def upload_document(
             file_size += len(chunk)
             if file_size > settings.MAX_UPLOAD_SIZE_BYTES:
                 f.close()
-                os.remove(file_path)
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
                 from app.core.exceptions import FileTooLargeError
                 raise FileTooLargeError(settings.MAX_UPLOAD_SIZE_BYTES)
             
@@ -52,7 +57,11 @@ async def upload_document(
     if existing_doc:
         # File exists, remove the duplicate uploaded file
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                import logging
+                logging.getLogger("app.api").warning(f"Failed to remove duplicate temp file {file_path}: {e}")
             
         import logging
         logging.getLogger("app.api").info(
@@ -122,6 +131,11 @@ async def download_document(
     doc = await document_service.get_document(document_id)
     file_path = doc.file_path
     
+    if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
+        fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
+        if os.path.exists(fallback_path):
+            file_path = fallback_path
+    
     if not file_path or not os.path.exists(file_path):
         logging.getLogger("app.api").warning("document_download_failed_not_found", extra={"document_id": str(document_id)})
         raise HTTPException(status_code=404, detail="File not found on server.")
@@ -145,6 +159,12 @@ async def reindex_document(
         
         import os
         file_path = doc.file_path
+        
+        if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
+            fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
+            if os.path.exists(fallback_path):
+                file_path = fallback_path
+                
         if not file_path or not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Physical file missing, cannot reindex.")
             

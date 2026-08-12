@@ -3,9 +3,12 @@
 from dataclasses import dataclass
 from typing import Any
 
+from app.config.settings import Settings
 from app.providers.embedding.base import EmbeddingGateway
+from app.providers.reranker.base import RerankerGateway
 from app.repositories.chunk import ChunkRepository
 from app.services.base import BaseService
+from app.services.query_analyzer import analyze_query
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,8 @@ class SearchResult:
     document_title: str
     score: float
     metadata: dict[str, Any]
+    file_path: str | None = None
+    page_number: int | None = None
 
 
 class SearchService(BaseService):
@@ -24,49 +29,106 @@ class SearchService(BaseService):
         self,
         chunk_repo: ChunkRepository,
         embedding_gateway: EmbeddingGateway,
-        default_top_k: int = 5,
+        reranker_gateway: RerankerGateway,
+        settings: Settings,
     ) -> None:
         super().__init__()
         self._chunk_repo = chunk_repo
         self._embedding_gateway = embedding_gateway
-        self._default_top_k = default_top_k
+        self._reranker_gateway = reranker_gateway
+        self._settings = settings
+        self._default_top_k = settings.SEARCH_DEFAULT_TOP_K
 
     async def search(self, query: str, top_k: int | None = None) -> list[SearchResult]:
         """Perform semantic search across all indexed chunks."""
         limit = top_k or self._default_top_k
         self._logger.debug("search_started", query=query, top_k=limit)
 
-        # Generate embedding for the search query
+        # 1. Analyze the query for explicit constraints (e.g. page numbers)
+        analysis = analyze_query(query)
+        if analysis.has_explicit_page_reference:
+            self._logger.info("search_explicit_page_detected", page=analysis.page_number)
+
+        # 2. Generate embedding for the search query
         query_embeddings = await self._embedding_gateway.embed([query])
         if not query_embeddings:
             return []
         
         query_embedding = query_embeddings[0]
+        
+        from app.config.settings import settings
+        if len(query_embedding) != settings.OPENROUTER_EMBEDDING_DIMENSIONS:
+            self._logger.error(
+                "search_invalid_embedding_dimension",
+                expected=settings.OPENROUTER_EMBEDDING_DIMENSIONS,
+                actual=len(query_embedding)
+            )
+            return []
 
-        # Retrieve similar chunks
-        similar_chunks = await self._chunk_repo.find_similar(query_embedding, limit=limit)
+        # Retrieve candidates, applying page constraints if any were detected
+        candidate_limit = self._settings.RERANK_CANDIDATE_LIMIT if self._settings.RERANKER_ENABLED else limit
+        similar_chunks_raw = await self._chunk_repo.find_similar(
+            query_embedding, 
+            limit=candidate_limit,
+            page_number=analysis.page_number
+        )
+        
+        similar_chunks = []
+        for chunk, distance in similar_chunks_raw:
+            if distance is None:
+                self._logger.warning("search_encountered_null_distance", chunk_id=str(chunk.id))
+                continue
+            similar_chunks.append((chunk, distance))
+        
+        if not similar_chunks:
+            return []
+            
+        # Rerank candidates if enabled
+        if self._settings.RERANKER_ENABLED:
+            self._logger.debug("search_reranking_candidates", count=len(similar_chunks))
+            reranked_results = await self._reranker_gateway.rerank(
+                query=query,
+                candidates=similar_chunks,
+                top_k=limit
+            )
+        else:
+            # Construct a dummy rerank result if disabled
+            from app.providers.reranker.base import RerankResult
+            reranked_results = [
+                RerankResult(
+                    chunk=c,
+                    vector_similarity=1.0 - d,
+                    rerank_score=0.0,
+                    original_rank=i
+                ) for i, (c, d) in enumerate(similar_chunks[:limit])
+            ]
         
         results = []
-        for chunk, distance in similar_chunks:
-            # We assume eager loading of chunk.document wasn't done for performance,
-            # but chunk.document can be populated if we change the query, OR we can 
-            # just store document title in chunk metadata. 
-            # Wait, chunk.document_id is available. If we need document_title, we should 
-            # join with Document in the repository query.
-            # I will assume `chunk.document` is available if we use selectinload in the repo,
-            # or I'll just use the metadata fallback. 
-            # Wait, `app.models.document` has title. Let's gracefully handle it.
+        for result in reranked_results:
+            chunk = result.chunk
+            if chunk is None:
+                continue
+                
             try:
                 title = chunk.document.title if chunk.document else "Unknown Document"
             except Exception:
                 title = "Unknown Document"
+                
+            # Copy metadata and add rerank metadata
+            metadata = dict(chunk.metadata_)
+            metadata["vector_similarity"] = result.vector_similarity
+            if self._settings.RERANKER_ENABLED:
+                metadata["rerank_score"] = result.rerank_score
+                metadata["original_rank"] = result.original_rank
 
             results.append(
                 SearchResult(
                     content=chunk.content,
                     document_title=title,
-                    score=1.0 - distance,  # Convert distance to similarity score
-                    metadata=chunk.metadata_,
+                    score=result.vector_similarity,  # Maintain vector similarity for score property backward compatibility
+                    metadata=metadata,
+                    file_path=chunk.document.file_path if chunk.document else None,
+                    page_number=chunk.page_number,
                 )
             )
 

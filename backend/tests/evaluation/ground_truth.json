@@ -1,0 +1,223 @@
+[
+  {
+    "id": "sem_001",
+    "category": "basic_semantic",
+    "question": "What are the core components of a single-agent system?",
+    "expected_pages": [12],
+    "expected_evidence": [
+      "The core components of a single-agent system include: an AI model that serves as the reasoning engine, a prompt that defines the agent's role and capabilities, and a toolkit of integrations"
+    ],
+    "answer_criteria": [
+      "Mention AI model, prompt, and toolkit"
+    ],
+    "difficulty": "easy",
+    "notes": "Direct extraction from the 'Architecture overview' section on page 12."
+  },
+  {
+    "id": "sem_002",
+    "category": "basic_semantic",
+    "question": "When should you avoid using a single agent?",
+    "expected_pages": [12],
+    "expected_evidence": [
+      "When you need to get the perfect answer on the first try, 100% of the time."
+    ],
+    "answer_criteria": [
+      "Mention needing perfect accuracy or 100% reliability on first try."
+    ],
+    "difficulty": "easy",
+    "notes": "Direct extraction from 'When to avoid' on page 12."
+  },
+  {
+    "id": "sem_003",
+    "category": "basic_semantic",
+    "question": "What is the core distinction between collaborative and hierarchical systems?",
+    "expected_pages": [15, 16, 17],
+    "expected_evidence": [
+      "The core distinction lies in their coordination philosophy: centralized control versus distributed autonomy",
+      "Unlike hierarchical systems with central control, collaborative patterns emphasize peer-to-peer interaction"
+    ],
+    "answer_criteria": [
+      "Mention centralized control vs peer-to-peer interaction/distributed autonomy."
+    ],
+    "difficulty": "medium",
+    "notes": "Evidence can be found on pages 15 or 17 (or 16 near collaborative systems section)."
+  },
+  {
+    "id": "sec_001",
+    "category": "section_retrieval",
+    "question": "What is the title of Chapter 4?",
+    "expected_pages": [26, 27],
+    "expected_evidence": [
+      "Chapter 4 Looking forward: the future of building AI agents"
+    ],
+    "answer_criteria": [
+      "Looking forward: the future of building AI agents"
+    ],
+    "difficulty": "easy",
+    "notes": "Title page for Chapter 4."
+  },
+  {
+    "id": "sec_002",
+    "category": "section_retrieval",
+    "question": "Where is the 'Next steps' section located?",
+    "expected_pages": [28, 29],
+    "expected_evidence": [
+      "Chapter 5 Next steps"
+    ],
+    "answer_criteria": [
+      "Chapter 5"
+    ],
+    "difficulty": "easy",
+    "notes": "Title page for Chapter 5."
+  },
+  {
+    "id": "pg_001",
+    "category": "page_specific",
+    "question": "Can you summarize the information presented on page 16?",
+    "expected_pages": [16],
+    "expected_evidence": [
+      "Example: Multi-agent hierarchical workflow - Marketing campaign development",
+      "Collaborative systems"
+    ],
+    "answer_criteria": [
+      "Provide summary of hierarchical workflow example (marketing) and introduction to collaborative systems."
+    ],
+    "difficulty": "easy",
+    "notes": "Explicitly requests page 16."
+  },
+  {
+    "id": "pg_002",
+    "category": "page_specific",
+    "question": "What example is given on page 20?",
+    "expected_pages": [20],
+    "expected_evidence": [
+      "Example: Multi-agent parallel workflow - financial risk assessment"
+    ],
+    "answer_criteria": [
+      "Financial risk assessment"
+    ],
+    "difficulty": "easy",
+    "notes": "Explicitly requests page 20."
+  },
+  {
+    "id": "pg_003",
+    "category": "page_specific",
+    "question": "What does page 12 say about the research agent example?",
+    "expected_pages": [12],
+    "expected_evidence": [
+      "Example: Single-agent research agent",
+      "User query",
+      "Initial analysis"
+    ],
+    "answer_criteria": [
+      "Summarize the single-agent research agent example."
+    ],
+    "difficulty": "easy",
+    "notes": "Explicit page 12 reference."
+  },
+  {
+    "id": "multi_001",
+    "category": "multi_chunk",
+    "question": "Give examples of both a hierarchical workflow and a parallel workflow.",
+    "expected_pages": [16, 20],
+    "expected_evidence": [
+      "Example: Multi-agent hierarchical workflow - Marketing campaign development",
+      "Example: Multi-agent parallel workflow - financial risk assessment"
+    ],
+    "answer_criteria": [
+      "Marketing campaign for hierarchical, financial risk for parallel."
+    ],
+    "difficulty": "medium",
+    "notes": "Requires chunks from two different pages to satisfy."
+  },
+  {
+    "id": "multi_002",
+    "category": "multi_chunk",
+    "question": "What are the rules for when to avoid sequential workflows compared to when to avoid parallel workflows?",
+    "expected_pages": [19, 20],
+    "expected_evidence": [
+      "Avoid sequential workflows when...",
+      "Avoid parallel workflows when agents need to build on each other's work or require cumulative context"
+    ],
+    "answer_criteria": [
+      "Mention constraints for sequential and constraints for parallel."
+    ],
+    "difficulty": "hard",
+    "notes": "Requires retrieving constraints from page 19 (sequential) and page 20 (parallel)."
+  },
+  {
+    "id": "vis_001",
+    "category": "visual",
+    "question": "Is there a diagram showing the multi-agent parallel workflow?",
+    "expected_pages": [20],
+    "expected_evidence": [
+      "Visual representation of Building Effective AI Agents- Architecture Patterns and Implementation Frameworks.pdf, page 20"
+    ],
+    "answer_criteria": [
+      "Yes, the diagram is on page 20."
+    ],
+    "difficulty": "medium",
+    "notes": "Checks if visual chunk on page 20 is retrieved."
+  },
+  {
+    "id": "vis_002",
+    "category": "visual",
+    "question": "Can you provide the visual architecture of the multi-agent hierarchical workflow?",
+    "expected_pages": [16],
+    "expected_evidence": [
+      "Visual representation of Building Effective AI Agents- Architecture Patterns and Implementation Frameworks.pdf, page 16"
+    ],
+    "answer_criteria": [
+      "Yes, diagram on page 16."
+    ],
+    "difficulty": "medium",
+    "notes": "Checks if visual chunk on page 16 is retrieved."
+  },
+  {
+    "id": "doc_001",
+    "category": "whole_document",
+    "question": "List all the major chapters mentioned in this document.",
+    "expected_pages": [26, 28],
+    "expected_evidence": [
+      "Chapter 4 Looking forward",
+      "Chapter 5 Next steps"
+    ],
+    "answer_criteria": [
+      "Must list the chapters."
+    ],
+    "difficulty": "hard",
+    "notes": "Broad document retrieval."
+  },
+  {
+    "id": "doc_002",
+    "category": "whole_document",
+    "question": "Give a broad overview of all architecture patterns discussed in the guide.",
+    "expected_pages": [12, 16, 20, 22],
+    "expected_evidence": [
+      "Single-agent system",
+      "Multi-agent hierarchical workflow",
+      "Parallel workflows",
+      "Evaluator-optimizer workflow"
+    ],
+    "answer_criteria": [
+      "Must identify multiple patterns from across the document."
+    ],
+    "difficulty": "hard",
+    "notes": "Requires wide retrieval."
+  },
+  {
+    "id": "syn_001",
+    "category": "synthesis",
+    "question": "How does the single-agent research agent differ from the marketing director agent in the hierarchical workflow?",
+    "expected_pages": [12, 16],
+    "expected_evidence": [
+      "Example: Single-agent research agent",
+      "Example: Multi-agent hierarchical workflow - Marketing campaign development"
+    ],
+    "answer_criteria": [
+      "Compare the single agent acting alone vs the marketing director acting as a supervisor over specialist agents."
+    ],
+    "difficulty": "medium",
+    "notes": "Requires retrieving both examples and synthesizing the difference."
+  }
+]

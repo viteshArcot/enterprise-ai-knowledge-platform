@@ -21,7 +21,7 @@ class Chunk(UUIDMixin, Base):
         ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(2048), nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     char_count: Mapped[int] = mapped_column(Integer, nullable=False)

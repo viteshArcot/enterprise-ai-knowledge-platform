@@ -3,6 +3,8 @@
 import uuid
 from collections.abc import AsyncGenerator
 import string
+import os
+import fitz
 
 from app.core.exceptions import NotFoundError, ProviderError, ProviderTimeoutError
 from app.models.conversation import Conversation
@@ -12,6 +14,8 @@ from app.repositories.conversation import ConversationRepository
 from app.repositories.message import MessageRepository
 from app.schemas.conversation import ConversationCreate, MessageCreate
 from app.services.base import BaseService
+from app.providers.llm.base import ImageAttachment
+from app.config.settings import settings
 from app.services.search import SearchService
 
 SYSTEM_PROMPT = """You are an Enterprise AI Knowledge Assistant.
@@ -104,11 +108,43 @@ class ChatService(BaseService):
             
             context_parts = []
             citations = []
+            visual_attachments = []
+            rendered_pages = set()
+
             for i, res in enumerate(search_results, start=1):
                 context_parts.append(f"--- Document: {res.document_title} ---\n{res.content}")
                 citations.append(
                     {"id": i, "title": res.document_title, "score": res.score, "metadata": res.metadata}
                 )
+
+                if res.metadata.get("source_type") == "visual" and res.file_path and res.page_number is not None:
+                    self._logger.debug("visual_context_detected", document_id=str(res.metadata.get("document_id", "unknown")), page_number=res.page_number)
+                    doc_page_key = (res.file_path, res.page_number)
+                    # Limit the maximum number of images we attach per request
+                    if doc_page_key not in rendered_pages and len(visual_attachments) < 5:
+                        file_path = res.file_path
+                        if file_path.startswith("/tmp/uploads/") and not os.path.exists(file_path):
+                            fallback = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
+                            if os.path.exists(fallback):
+                                file_path = fallback
+                        
+                        if os.path.exists(file_path):
+                            try:
+                                with fitz.open(file_path) as pdf_doc:
+                                    page_index = res.page_number - 1
+                                    if 0 <= page_index < pdf_doc.page_count:
+                                        page = pdf_doc.load_page(page_index)
+                                        pix = page.get_pixmap(matrix=fitz.Matrix(1.0, 1.0))
+                                        img_data = pix.tobytes("png")
+                                        visual_attachments.append(ImageAttachment(data=img_data, mime_type="image/png"))
+                                        rendered_pages.add(doc_page_key)
+                                        self._logger.info("visual_context_attached", page_number=res.page_number)
+                                    else:
+                                        self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason="invalid page number")
+                            except Exception as exc:
+                                self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason=str(exc))
+                        else:
+                            self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason="file not found")
 
             context_text = "\n\n".join(context_parts)
             
@@ -121,7 +157,7 @@ class ChatService(BaseService):
                 
             # Add current user message with context
             augmented_prompt = f"Context:\n{context_text}\n\nUser Question: {user_message}"
-            prompt_messages.append(PromptMessage(role="user", content=augmented_prompt))
+            prompt_messages.append(PromptMessage(role="user", content=augmented_prompt, images=visual_attachments if visual_attachments else None))
         except Exception as e:
             self._logger.error(f"Context retrieval error: {str(e)}", exc_info=True, conversation_id=str(conversation_id))
             error_msg = f"\n\n[System: Document retrieval failed: {str(e)}]"

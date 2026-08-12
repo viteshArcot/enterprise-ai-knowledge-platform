@@ -26,7 +26,7 @@ class ChunkRepository(BaseSqlAlchemyRepository[Chunk, ChunkCreate, ChunkUpdate])
         await self._session.flush()
 
     async def find_similar(
-        self, query_embedding: list[float], limit: int = 5
+        self, query_embedding: list[float], limit: int = 5, page_number: int | None = None
     ) -> list[tuple[Chunk, float]]:
         """
         Perform vector similarity search using pgvector.
@@ -36,7 +36,14 @@ class ChunkRepository(BaseSqlAlchemyRepository[Chunk, ChunkCreate, ChunkUpdate])
         # vector <=> operator is cosine distance
         stmt = (
             select(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("distance"))
-            .options(joinedload(Chunk.document))
+            .where(Chunk.embedding.is_not(None))
+        )
+
+        if page_number is not None:
+            stmt = stmt.where(Chunk.page_number == page_number)
+
+        stmt = (
+            stmt.options(joinedload(Chunk.document))
             .order_by(Chunk.embedding.cosine_distance(query_embedding))
             .limit(limit)
         )

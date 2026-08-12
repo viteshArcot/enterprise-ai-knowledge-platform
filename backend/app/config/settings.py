@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     DATABASE_AUTO_CREATE: bool = True
     DATABASE_HEALTHCHECK_ENABLED: bool = True
 
-    UPLOAD_DIRECTORY: Path = REPOSITORY_ROOT / "backend" / "uploads"
+    UPLOAD_DIRECTORY: Path = Field(default=Path(__file__).resolve().parents[2] / "uploads")
     MAX_UPLOAD_SIZE_BYTES: int = Field(default=100 * 1024 * 1024, ge=1)
     CHUNK_SIZE_TOKENS: int = Field(default=512, ge=64, le=2048)
     CHUNK_OVERLAP_TOKENS: int = Field(default=64, ge=0, le=512)
@@ -130,14 +130,24 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str | None = None
     OPENROUTER_MODEL: str = "openai/gpt-4.1"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_EMBEDDING_MODEL: str = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
+    OPENROUTER_EMBEDDING_DIMENSIONS: int = Field(default=2048, ge=1)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_CHAT_MODEL: str = "gemini-2.0-flash"
-    GEMINI_EMBEDDING_DIMENSIONS: int = Field(default=768, ge=1)
     GEMINI_TIMEOUT_SECONDS: int = Field(default=60, ge=1, le=120)
     GEMINI_MAX_RETRIES: int = Field(default=3, ge=0, le=5)
     SEARCH_DEFAULT_TOP_K: int = Field(default=5, ge=1, le=20)
     PROMPT_MAX_TOKENS: int = Field(default=8192, ge=1024)
+
+    # =========================================================================
+    # Reranker
+    # =========================================================================
+
+    RERANKER_ENABLED: bool = False
+    RERANK_CANDIDATE_LIMIT: int = Field(default=30, ge=10, le=100)
+    OPENROUTER_RERANK_MODEL: str = "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
+    RERANKER_TIMEOUT_SECONDS: int = Field(default=15, ge=1, le=60)
+
 
     # =========================================================================
     # Logging

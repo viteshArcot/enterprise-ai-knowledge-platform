@@ -17,11 +17,14 @@ from app.repositories.message import MessageRepository
 from app.ingestion.parsers.registry import ParserRegistry
 from app.ingestion.chunking.recursive import RecursiveTokenChunker
 
-from app.providers.embedding.gemini import GeminiEmbeddingGateway
+from app.providers.embedding.base import EmbeddingGateway
 
 # IMPORTANT
 from app.providers.llm.base import LLMGateway
 from app.providers.llm.factory import create_llm_gateway
+
+from app.providers.reranker.base import RerankerGateway
+from app.providers.reranker.factory import create_reranker_gateway
 
 from app.services.document import DocumentService
 from app.services.search import SearchService
@@ -86,11 +89,10 @@ def get_recursive_chunker(settings: AppSettings) -> RecursiveTokenChunker:
 # ---------------------------------------------------------------------------
 
 
-def get_embedding_gateway(settings: AppSettings) -> GeminiEmbeddingGateway:
-    """
-    Embeddings always use Gemini in Phase 2.
-    """
-    return GeminiEmbeddingGateway(config=settings)
+def get_embedding_gateway(settings: AppSettings) -> EmbeddingGateway:
+    """Dependency provider for the embedding gateway."""
+    from app.providers.embedding.factory import create_embedding_gateway
+    return create_embedding_gateway(config=settings)
 
 
 def get_llm_gateway(settings: AppSettings) -> LLMGateway:
@@ -98,6 +100,11 @@ def get_llm_gateway(settings: AppSettings) -> LLMGateway:
     Chat provider is selected from LLM_PROVIDER.
     """
     return create_llm_gateway(settings)
+
+
+def get_reranker_gateway(settings: AppSettings) -> RerankerGateway:
+    """Dependency provider for the reranker gateway."""
+    return create_reranker_gateway(settings)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +118,7 @@ def get_document_service(
     parser_registry: Annotated[ParserRegistry, Depends(get_parser_registry)],
     chunker: Annotated[RecursiveTokenChunker, Depends(get_recursive_chunker)],
     embedding_gateway: Annotated[
-        GeminiEmbeddingGateway,
+        EmbeddingGateway,
         Depends(get_embedding_gateway),
     ],
 ) -> DocumentService:
@@ -127,14 +134,20 @@ def get_document_service(
 def get_search_service(
     chunk_repo: Annotated[ChunkRepository, Depends(get_chunk_repository)],
     embedding_gateway: Annotated[
-        GeminiEmbeddingGateway,
+        EmbeddingGateway,
         Depends(get_embedding_gateway),
     ],
+    reranker_gateway: Annotated[
+        RerankerGateway,
+        Depends(get_reranker_gateway),
+    ],
+    settings: AppSettings,
 ) -> SearchService:
     return SearchService(
         chunk_repo=chunk_repo,
         embedding_gateway=embedding_gateway,
-        default_top_k=5,
+        reranker_gateway=reranker_gateway,
+        settings=settings,
     )
 
 

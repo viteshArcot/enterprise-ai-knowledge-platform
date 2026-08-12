@@ -30,11 +30,15 @@ class GeminiLLMGateway(LLMGateway):
     async def stream(self, messages: list[PromptMessage]) -> AsyncIterator[str]:
         """Yield Gemini text chunks with retry handling before first output."""
         system = next((message.content for message in messages if message.role == "system"), None)
-        contents = [
-            types.Content(role="model" if message.role == "assistant" else "user", parts=[types.Part(text=message.content)])
-            for message in messages
-            if message.role != "system"
-        ]
+        contents = []
+        for message in messages:
+            if message.role == "system":
+                continue
+            parts = [types.Part(text=message.content)]
+            if getattr(message, "images", None):
+                for img in message.images:
+                    parts.append(types.Part.from_bytes(data=img.data, mime_type=img.mime_type))
+            contents.append(types.Content(role="model" if message.role == "assistant" else "user", parts=parts))
         for attempt in range(self._retries + 1):
             emitted = False
             try:

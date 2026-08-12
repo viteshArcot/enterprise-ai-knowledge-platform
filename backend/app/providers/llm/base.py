@@ -6,11 +6,19 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ImageAttachment:
+    """An image attached to a prompt message."""
+    data: bytes
+    mime_type: str
+
+
+@dataclass(frozen=True)
 class PromptMessage:
     """A provider-neutral chat prompt message."""
 
     role: str
     content: str
+    images: list[ImageAttachment] | None = None
 
 
 class LLMGateway(ABC):

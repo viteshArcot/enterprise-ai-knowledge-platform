@@ -15,12 +15,15 @@ class DocxParser(DocumentParser):
 
     def parse(self, content: bytes, file_name: str) -> ParsedDocument:
         """Read a DOCX archive directly from memory."""
+        from app.ingestion.parsers.base import ParsedPage
         try:
             document = DocxDocument(BytesIO(content))
         except Exception as exc:
             raise IngestionError(f"Unable to extract text from '{file_name}'.") from exc
         paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+        full_text = "\n\n".join(paragraphs)
         return ParsedDocument(
-            text="\n\n".join(paragraphs),
+            text=full_text,
+            pages=[ParsedPage(page_number=1, text=full_text)],
             metadata={"author": document.core_properties.author or None},
         )

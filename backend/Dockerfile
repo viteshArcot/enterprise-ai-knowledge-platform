@@ -58,8 +58,10 @@ WORKDIR /app
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy application source code
+# Copy application source code and migration scripts
 COPY --chown=appuser:appgroup app/ ./app/
+COPY --chown=appuser:appgroup alembic.ini .
+COPY --chown=appuser:appgroup alembic/ ./alembic/
 
 # Switch to non-root user
 USER appuser
@@ -75,3 +77,47 @@ CMD ["uvicorn", "app.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--workers", "1"]
+
+
+# -----------------------------------------------------------------------------
+# Stage 3: Test builder
+# -----------------------------------------------------------------------------
+FROM builder AS test-builder
+
+# Install dev dependencies using the optional extra over the existing prefix
+RUN pip install --no-cache-dir --prefix=/install ".[dev]"
+
+
+# -----------------------------------------------------------------------------
+# Stage 4: Test runtime
+# -----------------------------------------------------------------------------
+FROM python:3.12-slim AS test
+
+LABEL org.opencontainers.image.title="Enterprise AI Knowledge Platform API (Test)"
+LABEL org.opencontainers.image.description="Testing container with dev dependencies"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system appgroup && \
+    useradd --system --gid appgroup --no-create-home appuser
+
+WORKDIR /app
+
+# Copy installed packages from test-builder (includes dev dependencies)
+COPY --from=test-builder /install /usr/local
+
+# Copy application source code, tests, and migration scripts
+COPY --chown=appuser:appgroup app/ ./app/
+COPY --chown=appuser:appgroup alembic.ini .
+COPY --chown=appuser:appgroup alembic/ ./alembic/
+COPY --chown=appuser:appgroup tests/ ./tests/
+COPY --chown=appuser:appgroup pyproject.toml .
+
+# Switch to non-root user
+USER appuser
+
+# Run pytest by default against the postgres db
+CMD ["python", "-m", "pytest"]
