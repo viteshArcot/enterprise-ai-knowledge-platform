@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     # WARNING: Leaks sensitive data if enabled in production.
     DATABASE_ECHO: bool = False
 
-    DATABASE_AUTO_CREATE: bool = True
+    DATABASE_AUTO_CREATE: bool = Field(default=False)
     DATABASE_HEALTHCHECK_ENABLED: bool = True
 
     UPLOAD_DIRECTORY: Path = Field(default=Path(__file__).resolve().parents[2] / "uploads")
@@ -147,6 +147,15 @@ class Settings(BaseSettings):
     RERANK_CANDIDATE_LIMIT: int = Field(default=30, ge=10, le=100)
     OPENROUTER_RERANK_MODEL: str = "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
     RERANKER_TIMEOUT_SECONDS: int = Field(default=15, ge=1, le=60)
+
+    # =========================================================================
+    # Coverage Retrieval
+    # =========================================================================
+
+    RAG_COVERAGE_ENABLED: bool = True
+    RAG_COVERAGE_CANDIDATE_LIMIT: int = Field(default=100, ge=20, le=200)
+    RAG_COVERAGE_RELEVANCE_WEIGHT: float = Field(default=0.2, ge=0.1, le=1.0)
+    RAG_COVERAGE_PAGE_BONUS: float = Field(default=0.5, ge=0.0, le=0.5)
 
 
     # =========================================================================

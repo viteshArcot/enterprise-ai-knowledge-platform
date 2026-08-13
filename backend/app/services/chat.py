@@ -72,8 +72,33 @@ class ChatService(BaseService):
             raise NotFoundError("Conversation", str(conversation_id))
         self._logger.info("conversation_deleted", conversation_id=str(conversation_id))
 
+    async def attach_document(self, conversation_id: uuid.UUID, document_id: uuid.UUID) -> Conversation:
+        """Attach a document to a conversation."""
+        from app.models.document import Document
+        from sqlalchemy import select
+
+        conversation = await self.get_conversation(conversation_id)
+        doc = await self._conversation_repo._session.scalar(select(Document).where(Document.id == document_id))
+        if not doc:
+            raise NotFoundError("Document", str(document_id))
+
+        if any(d.id == doc.id for d in conversation.documents):
+            # Already attached
+            return conversation
+
+        conversation.documents.append(doc)
+        await self._conversation_repo._session.commit()
+        return conversation
+
+    async def detach_document(self, conversation_id: uuid.UUID, document_id: uuid.UUID) -> Conversation:
+        """Detach a document from a conversation."""
+        conversation = await self.get_conversation(conversation_id)
+        conversation.documents = [d for d in conversation.documents if d.id != document_id]
+        await self._conversation_repo._session.commit()
+        return conversation
+
     async def stream_chat(
-        self, conversation_id: uuid.UUID, user_message: str
+        self, conversation_id: uuid.UUID, user_message: str, document_ids: list[uuid.UUID] | None = None
     ) -> AsyncGenerator[str, None]:
         """Process a user message, retrieve context, and stream the LLM response."""
         conversation = await self.get_conversation(conversation_id)
@@ -95,7 +120,7 @@ class ChatService(BaseService):
             keywords = [w for w in words if w.lower() not in stopwords]
             if not keywords:
                 keywords = words
-            
+
             new_title = " ".join(keywords[:5]).strip().title()
             if new_title:
                 await self._conversation_repo.update(conversation_id, {"title": new_title})
@@ -104,8 +129,8 @@ class ChatService(BaseService):
 
         try:
             # 2. Retrieve relevant context
-            search_results = await self._search_service.search(user_message, top_k=5)
-            
+            search_results = await self._search_service.search(user_message, top_k=5, document_ids=document_ids)
+
             context_parts = []
             citations = []
             visual_attachments = []
@@ -127,7 +152,7 @@ class ChatService(BaseService):
                             fallback = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
                             if os.path.exists(fallback):
                                 file_path = fallback
-                        
+
                         if os.path.exists(file_path):
                             try:
                                 with fitz.open(file_path) as pdf_doc:
@@ -147,14 +172,14 @@ class ChatService(BaseService):
                             self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason="file not found")
 
             context_text = "\n\n".join(context_parts)
-            
+
             # 3. Build prompts
             prompt_messages = [PromptMessage(role="system", content=SYSTEM_PROMPT)]
-            
+
             # Add history
             for msg in conversation.messages:
                 prompt_messages.append(PromptMessage(role=msg.role.value, content=msg.content))
-                
+
             # Add current user message with context
             augmented_prompt = f"Context:\n{context_text}\n\nUser Question: {user_message}"
             prompt_messages.append(PromptMessage(role="user", content=augmented_prompt, images=visual_attachments if visual_attachments else None))
@@ -175,13 +200,13 @@ class ChatService(BaseService):
 
         # 4. Stream response and capture full text
         self._logger.info(
-            "streaming_response_started", 
+            "streaming_response_started",
             conversation_id=str(conversation_id),
             model=self._llm_gateway.model_name,
             retrieved_chunk_count=len(citations),
             prompt_size_chars=len(augmented_prompt)
         )
-        
+
         full_response = ""
         try:
             async for chunk in self._llm_gateway.stream(prompt_messages):
@@ -215,7 +240,7 @@ class ChatService(BaseService):
             )
             await self._message_repo._session.commit()
             self._logger.info(
-                "streaming_response_completed", 
+                "streaming_response_completed",
                 conversation_id=str(conversation_id),
                 completion_size_chars=len(full_response),
             )

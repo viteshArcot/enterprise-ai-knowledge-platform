@@ -17,7 +17,7 @@ class DocumentRepository(BaseSqlAlchemyRepository[Document, DocumentCreate, Docu
     async def get_by_file_hash(self, file_hash: str) -> Document | None:
         """Find a document by its file hash."""
         stmt = select(Document).where(
-            Document.metadata_["file_hash"].astext == file_hash
+            Document.file_hash == file_hash
         )
         result = await self._session.execute(stmt)
         return result.scalars().first()

@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from app.models.message import MessageRole
+from app.schemas.document import DocumentResponse
 
 
 class MessageBase(BaseModel):
@@ -52,5 +53,6 @@ class ConversationResponse(ConversationBase):
     created_at: datetime
     updated_at: datetime
     messages: list[MessageResponse] = []
+    documents: list["DocumentResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)

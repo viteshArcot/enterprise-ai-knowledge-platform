@@ -56,10 +56,10 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: var(--primary-bg);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
+  background: var(--gradient-accent);
+  color: white;
   border-radius: var(--radius-md);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.2);
   font-weight: 700;
   font-size: 1.25rem;
 }
@@ -99,9 +99,9 @@
 .sidebar-search-input {
   width: 100%;
   padding: 0.5rem 0.75rem 0.5rem 2.25rem !important;
-  background-color: var(--bg-main) !important;
+  background-color: var(--bg-subtle) !important;
   border: 1px solid transparent !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: var(--radius-lg) !important;
   font-size: 0.8125rem !important;
   transition: all var(--transition-fast) !important;
 }
@@ -109,7 +109,7 @@
 .sidebar-search-input:focus {
   border-color: var(--border-color) !important;
   background-color: var(--bg-surface) !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 /* Sidebar Scrollable */
@@ -156,7 +156,7 @@
   align-items: center;
   flex: 1;
   gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: 0.875rem;
@@ -173,9 +173,11 @@
 }
 
 .sidebar-link.active {
-  background-color: var(--primary-bg);
-  color: var(--primary-hover);
-  border: 1px solid var(--border-color);
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .chat-link {
@@ -299,7 +301,7 @@
   .mobile-header {
     display: flex;
   }
-  
+
   .sidebar-overlay {
     display: block;
   }

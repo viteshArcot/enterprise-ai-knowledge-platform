@@ -52,7 +52,7 @@ export const Documents: FC = () => {
     }
   }, [documents, fetchDocuments]);
 
-  const handleFile = async (file: File) => {
+  const handleFile = async (file: File, force: boolean = false) => {
     if (!file) return;
 
     // 100MB limit
@@ -67,6 +67,9 @@ export const Documents: FC = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', file.name);
+    if (force) {
+      formData.append('force', 'true');
+    }
 
     try {
       const progressInterval = setInterval(() => {
@@ -74,11 +77,11 @@ export const Documents: FC = () => {
       }, 300);
 
       await apiClient.upload('/api/v1/documents/', formData);
-      
+
       clearInterval(progressInterval);
       setUploadProgress(100);
       toast.success('Document uploaded successfully');
-      
+
       setTimeout(() => {
         setUploadProgress(0);
         setIsUploading(false);
@@ -86,6 +89,14 @@ export const Documents: FC = () => {
       }, 500);
 
     } catch (err: any) {
+      if (err.status === 409 && !force) {
+        setUploadProgress(0);
+        setIsUploading(false);
+        if (window.confirm("This document already exists in the knowledge base. Would you like to upload it again as a duplicate?")) {
+           handleFile(file, true);
+        }
+        return;
+      }
       toast.error(err.message || 'Upload failed');
       setIsUploading(false);
       setUploadProgress(0);
@@ -105,7 +116,7 @@ export const Documents: FC = () => {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFile(e.dataTransfer.files[0]);
       e.dataTransfer.clearData();
@@ -114,13 +125,13 @@ export const Documents: FC = () => {
 
   const getStatusDisplay = (status: string, errMsg?: string) => {
     switch (status.toLowerCase()) {
-      case 'ready': 
+      case 'ready':
         return (
           <span className="status-badge status-ready">
             <CheckCircle2 size={14} /> Ready
           </span>
         );
-      case 'failed': 
+      case 'failed':
         return (
           <span className="status-badge status-failed" title={errMsg}>
             <AlertCircle size={14} /> Failed
@@ -128,7 +139,7 @@ export const Documents: FC = () => {
         );
       case 'uploading':
       case 'processing':
-      default: 
+      default:
         return (
           <span className="status-badge status-processing">
             <Loader2 size={14} className="spin" /> Processing
@@ -146,7 +157,7 @@ export const Documents: FC = () => {
         </div>
       </div>
 
-      <div 
+      <div
         className={`upload-dropzone card ${isDragActive ? 'drag-active' : ''} ${isUploading ? 'uploading' : ''}`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -168,13 +179,13 @@ export const Documents: FC = () => {
           ) : (
             <>
               <div className="upload-icon-wrapper">
-                <UploadCloud size={32} className="text-primary" />
+                <UploadCloud size={32} />
               </div>
               <h3 className="upload-title">Click or drag file to this area to upload</h3>
               <p className="upload-hint">Support for PDF, DOCX, TXT, and Markdown files.</p>
             </>
           )}
-          
+
           <input
             type="file"
             ref={fileInputRef}
@@ -194,7 +205,7 @@ export const Documents: FC = () => {
           <h2>Indexed Documents</h2>
           <span className="document-count">{documents.length} files</span>
         </div>
-        
+
         <div className="card documents-card">
           {isLoading && documents.length === 0 ? (
             <div className="skeleton-container">
@@ -237,31 +248,31 @@ export const Documents: FC = () => {
                         </div>
                       </td>
                       <td className="text-muted text-sm">
-                        {new Date(doc.created_at).toLocaleDateString(undefined, { 
-                          year: 'numeric', month: 'short', day: 'numeric', 
+                        {new Date(doc.created_at).toLocaleDateString(undefined, {
+                          year: 'numeric', month: 'short', day: 'numeric',
                           hour: '2-digit', minute: '2-digit'
                         })}
                       </td>
                       <td className="text-right doc-actions">
                         {doc.file_name?.toLowerCase().endsWith('.pdf') ? (
-                          <button 
-                            className="btn-icon" 
-                            title="Preview PDF" 
+                          <button
+                            className="btn-icon"
+                            title="Preview PDF"
                             onClick={() => window.open(`/api/v1/documents/${doc.id}/download`, '_blank')}
                           >
                             <Eye size={16} />
                           </button>
                         ) : null}
-                        <button 
-                          className="btn-icon" 
-                          title="Download" 
+                        <button
+                          className="btn-icon"
+                          title="Download"
                           onClick={() => window.location.href = `/api/v1/documents/${doc.id}/download`}
                         >
                           <Download size={16} />
                         </button>
-                        <button 
-                          className="btn-icon text-danger" 
-                          title="Delete" 
+                        <button
+                          className="btn-icon text-danger"
+                          title="Delete"
                           onClick={async () => {
                             if (!window.confirm('Are you sure you want to delete this document?')) return;
                             try {

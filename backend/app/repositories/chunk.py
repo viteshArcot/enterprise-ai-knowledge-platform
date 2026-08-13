@@ -26,7 +26,7 @@ class ChunkRepository(BaseSqlAlchemyRepository[Chunk, ChunkCreate, ChunkUpdate])
         await self._session.flush()
 
     async def find_similar(
-        self, query_embedding: list[float], limit: int = 5, page_number: int | None = None
+        self, query_embedding: list[float], limit: int = 5, page_number: int | None = None, document_ids: list[__import__('uuid').UUID] | None = None
     ) -> list[tuple[Chunk, float]]:
         """
         Perform vector similarity search using pgvector.
@@ -41,6 +41,9 @@ class ChunkRepository(BaseSqlAlchemyRepository[Chunk, ChunkCreate, ChunkUpdate])
 
         if page_number is not None:
             stmt = stmt.where(Chunk.page_number == page_number)
+
+        if document_ids is not None and len(document_ids) > 0:
+            stmt = stmt.where(Chunk.document_id.in_(document_ids))
 
         stmt = (
             stmt.options(joinedload(Chunk.document))

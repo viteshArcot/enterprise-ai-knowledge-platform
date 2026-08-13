@@ -15,12 +15,13 @@ from app.providers.reranker.factory import create_reranker_gateway
 from app.repositories.chunk import ChunkRepository
 
 
-def calculate_metrics_for_question(expected_pages: set[int], retrieved_chunks: list[dict]):
+def calculate_metrics_for_question(expected_page_groups: list[set[int]], retrieved_chunks: list[dict]):
     hit_at_5 = False
     hit_at_10 = False
     hit_at_20 = False
     first_relevant_rank = 0
-    found_expected_pages = set()
+    found_expected_pages = set() # Explicit pages found
+    satisfied_group_indices = set()
     retrieved_pages_ordered = []
 
     for item in retrieved_chunks:
@@ -28,12 +29,14 @@ def calculate_metrics_for_question(expected_pages: set[int], retrieved_chunks: l
         page_num = item["page_number"]
         if page_num is not None:
             retrieved_pages_ordered.append(page_num)
-        
+
         is_hit = False
-        if page_num in expected_pages:
-            is_hit = True
-            found_expected_pages.add(page_num)
-        
+        for idx, group in enumerate(expected_page_groups):
+            if page_num in group:
+                is_hit = True
+                found_expected_pages.add(page_num)
+                satisfied_group_indices.add(idx)
+
         if is_hit:
             if first_relevant_rank == 0:
                 first_relevant_rank = rank
@@ -44,7 +47,7 @@ def calculate_metrics_for_question(expected_pages: set[int], retrieved_chunks: l
             if rank <= 20:
                 hit_at_20 = True
 
-    is_complete = len(found_expected_pages) == len(expected_pages) if expected_pages else False
+    is_complete = len(satisfied_group_indices) == len(expected_page_groups) if expected_page_groups else False
     rr = 1.0 / first_relevant_rank if first_relevant_rank > 0 else 0.0
 
     return {
@@ -89,7 +92,7 @@ async def run_evaluation(mode: str):
         if not docs:
             print(f"Error: Target document '{target_doc_title}' not found in the database.")
             sys.exit(1)
-        
+
         target_doc = docs[0]
 
         print(f"\nDocument:\n{target_doc.title}\n")
@@ -102,7 +105,7 @@ async def run_evaluation(mode: str):
             "overall": {"r5": 0, "r10": 0, "r20": 0, "rr": 0.0, "total": 0},
             "categories": defaultdict(lambda: {"r5": 0, "r10": 0, "r20": 0, "rr": 0.0, "total": 0, "complete": 0})
         }
-        
+
         failures = []
 
         # 4. Evaluate each question
@@ -110,8 +113,14 @@ async def run_evaluation(mode: str):
             qid = record["id"]
             category = record["category"]
             question = record["question"]
-            expected_pages = set(record.get("expected_pages", []))
-            
+            expected_pages_raw = record.get("expected_pages", [])
+            expected_page_groups = []
+            for item in expected_pages_raw:
+                if isinstance(item, list):
+                    expected_page_groups.append(set(item))
+                else:
+                    expected_page_groups.append({item})
+
             # Embed question
             embeddings = await gateway.embed([question])
             if not embeddings:
@@ -122,14 +131,37 @@ async def run_evaluation(mode: str):
             # Run existing retrieval (Top 20 or candidate limit) with page constraint if detected
             from app.services.query_analyzer import analyze_query
             analysis = analyze_query(question)
-            
+
+            is_coverage_mode = (mode == "coverage")
+            is_coverage_retrieval = (
+                analysis.is_document_wide_query
+                and is_coverage_mode
+                and not analysis.has_explicit_page_reference
+            )
+
+            if is_coverage_retrieval:
+                candidate_limit = settings.RAG_COVERAGE_CANDIDATE_LIMIT
+            elif mode == "reranked":
+                candidate_limit = settings.RERANK_CANDIDATE_LIMIT
+            else:
+                candidate_limit = 20
+
             similar_chunks = await chunk_repo.find_similar(
-                query_embedding, 
-                limit=settings.RERANK_CANDIDATE_LIMIT if mode == "reranked" else 20,
+                query_embedding,
+                limit=candidate_limit,
                 page_number=analysis.page_number
             )
-            
-            if mode == "reranked":
+
+            if is_coverage_retrieval:
+                from app.services.coverage_selector import select_coverage_aware_candidates
+                final_chunks_raw = select_coverage_aware_candidates(
+                    similar_chunks,
+                    target_k=20,
+                    relevance_weight=settings.RAG_COVERAGE_RELEVANCE_WEIGHT,
+                    page_bonus=settings.RAG_COVERAGE_PAGE_BONUS
+                )
+                final_chunks = [(chunk, distance) for chunk, distance in final_chunks_raw]
+            elif mode == "reranked":
                 from app.providers.reranker.base import RerankResult
                 reranked_results = await reranker_gateway.rerank(
                     query=question,
@@ -138,14 +170,14 @@ async def run_evaluation(mode: str):
                 )
                 final_chunks = [(r.chunk, 1.0 - r.vector_similarity) for r in reranked_results]
             else:
-                final_chunks = similar_chunks
-            
+                final_chunks = similar_chunks[:20]
+
             retrieved_items = []
             hit_at_5 = False
             hit_at_10 = False
             hit_at_20 = False
             first_relevant_rank = 0
-            
+
             # For tracking complete vs partial evidence
             found_expected_pages = set()
             retrieved_pages_ordered = []
@@ -158,7 +190,7 @@ async def run_evaluation(mode: str):
                 page_num = chunk.page_number
                 source_type = chunk.metadata_.get("source_type", "unknown")
                 similarity = 1.0 - (distance if distance is not None else 1.0)
-                
+
                 retrieved_items.append({
                     "rank": len(retrieved_items) + 1,
                     "chunk_id": str(chunk.id),
@@ -169,7 +201,7 @@ async def run_evaluation(mode: str):
                     "source_type": source_type
                 })
 
-            metrics_result = calculate_metrics_for_question(expected_pages, retrieved_items)
+            metrics_result = calculate_metrics_for_question(expected_page_groups, retrieved_items)
             hit_at_5 = metrics_result["hit_at_5"]
             hit_at_10 = metrics_result["hit_at_10"]
             hit_at_20 = metrics_result["hit_at_20"]
@@ -209,9 +241,9 @@ async def run_evaluation(mode: str):
                     "id": qid,
                     "category": category,
                     "question": question,
-                    "expected_pages": sorted(list(expected_pages)),
+                    "expected_pages": expected_pages_raw,
                     "found_expected_pages": sorted(list(found_expected_pages)),
-                    "retrieved_pages_top_10": retrieved_pages_ordered[:10],
+                    "retrieved_pages_top_20": retrieved_pages_ordered[:20],
                     "hit_at_5": hit_at_5,
                     "hit_at_10": hit_at_10,
                     "hit_at_20": hit_at_20,
@@ -227,7 +259,7 @@ async def run_evaluation(mode: str):
             print(f"Recall@10: {metrics['overall']['r10'] / total * 100:.1f}%")
             print(f"Recall@20: {metrics['overall']['r20'] / total * 100:.1f}%")
             print(f"MRR:       {metrics['overall']['rr'] / total:.3f}")
-        
+
         print("\n------------------------------------------------------------")
         print("BY CATEGORY")
         print("------------------------------------------------------------")
@@ -249,11 +281,11 @@ async def run_evaluation(mode: str):
             print(f"Category: {fail['category']}")
             print(f"Question:\n\"{fail['question']}\"")
             print(f"\nExpected pages:\n{fail['expected_pages']}")
-            print(f"Retrieved top 10 pages:\n{fail['retrieved_pages_top_10']}")
+            print(f"Retrieved top 20 pages:\n{fail['retrieved_pages_top_20']}")
             print(f"Found required pages:\n{fail['found_expected_pages']}")
             if fail['category'] == 'visual':
                 print(f"Retrieved source_types (Top 5):\n{fail['retrieved_source_types']}")
-            
+
             print(f"\nHit@5:  {'PASS' if fail['hit_at_5'] else 'FAIL'}")
             print(f"Hit@10: {'PASS' if fail['hit_at_10'] else 'FAIL'}")
             print(f"Hit@20: {'PASS' if fail['hit_at_20'] else 'FAIL'}")
@@ -263,8 +295,8 @@ async def run_evaluation(mode: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate RAG Pipeline")
-    parser.add_argument("--mode", type=str, choices=["baseline", "reranked"], required=True,
-                        help="Mode to run the evaluation in: baseline or reranked")
+    parser.add_argument("--mode", type=str, choices=["baseline", "reranked", "coverage"], required=True,
+                        help="Mode to run the evaluation in: baseline, reranked, or coverage")
     args = parser.parse_args()
-    
+
     asyncio.run(run_evaluation(args.mode))

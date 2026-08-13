@@ -14,6 +14,7 @@
   font-size: 1.75rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .page-subtitle {
@@ -23,7 +24,7 @@
 
 /* Upload Dropzone */
 .upload-dropzone {
-  border: 2px dashed var(--border-color);
+  border: 2px dashed var(--border-light);
   padding: 3rem 2rem;
   text-align: center;
   cursor: pointer;
@@ -33,16 +34,20 @@
   align-items: center;
   justify-content: center;
   min-height: 250px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+  margin-bottom: 2rem;
 }
 
 .upload-dropzone:hover:not(.uploading) {
-  border-color: var(--text-muted);
+  border-color: #6366f1;
   background-color: var(--bg-surface-hover);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.05);
 }
 
 .upload-dropzone.drag-active {
-  border-color: var(--primary-color);
-  background-color: var(--primary-bg);
+  border-color: #6366f1;
+  background-color: rgba(99, 102, 241, 0.02);
 }
 
 .upload-dropzone.uploading {
@@ -67,10 +72,11 @@
   justify-content: center;
   width: 64px;
   height: 64px;
-  background-color: var(--primary-bg);
+  background: var(--gradient-accent);
   border-radius: 50%;
   margin-bottom: 0.5rem;
-  color: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.2);
 }
 
 .upload-title {
@@ -106,7 +112,7 @@
 .progress-bar-wrapper {
   width: 100%;
   height: 6px;
-  background-color: var(--border-color);
+  background-color: var(--bg-subtle);
   border-radius: 3px;
   overflow: hidden;
   margin-bottom: 0.75rem;
@@ -114,7 +120,7 @@
 
 .progress-bar {
   height: 100%;
-  background-color: var(--primary-hover);
+  background: var(--gradient-accent);
   transition: width 0.3s ease;
 }
 
@@ -129,15 +135,17 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .documents-header h2 {
   font-size: 1.25rem;
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .document-count {
-  background-color: var(--bg-surface-hover);
+  background-color: var(--bg-subtle);
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-xl);
   font-size: 0.75rem;
@@ -147,6 +155,10 @@
 
 .documents-card {
   padding: 0;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-light);
   overflow: hidden;
 }
 
@@ -163,11 +175,11 @@
 .data-table th, .data-table td {
   padding: 1rem 1.5rem;
   text-align: left;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .data-table th {
-  background-color: var(--bg-main);
+  background-color: #fafafa;
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -181,12 +193,11 @@
 
 .data-table tbody tr {
   transition: all var(--transition-normal);
+  background-color: var(--bg-surface);
 }
 
 .data-table tbody tr:hover {
   background-color: var(--bg-surface-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .doc-title-cell {
@@ -204,6 +215,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  color: var(--text-secondary);
 }
 
 /* Badges */
@@ -212,27 +224,26 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  box-shadow: var(--shadow-sm);
 }
 
 .status-ready {
-  background-color: var(--success-bg);
-  color: var(--success);
+  background-color: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
 }
 
 .status-processing {
-  background-color: var(--bg-surface-hover);
+  background-color: var(--bg-subtle);
   color: var(--text-secondary);
 }
 
 .status-failed {
-  background-color: var(--error-bg);
-  color: var(--error);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
   cursor: help;
 }
 
@@ -246,7 +257,7 @@
 
 .skeleton-row {
   height: 48px;
-  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-surface-hover) 50%, var(--bg-surface) 75%);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, #f1f5f9 50%, var(--bg-subtle) 75%);
   background-size: 200% 100%;
   animation: loading 1.5s infinite;
   border-radius: var(--radius-md);
@@ -269,18 +280,20 @@
 .empty-state-icon {
   width: 80px;
   height: 80px;
-  background-color: var(--bg-main);
+  background-color: var(--bg-subtle);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 1.5rem;
+  color: var(--text-muted);
 }
 
 .empty-state h3 {
   font-size: 1.25rem;
   color: var(--text-primary);
   margin-bottom: 0.5rem;
+  font-weight: 500;
 }
 
 /* Responsive */
@@ -288,16 +301,16 @@
   .documents-page {
     padding: 1rem;
   }
-  
+
   .page-title {
     font-size: 1.5rem;
   }
-  
+
   .upload-dropzone {
     padding: 2rem 1rem;
     min-height: 200px;
   }
-  
+
   .data-table th, .data-table td {
     padding: 0.75rem 1rem;
   }

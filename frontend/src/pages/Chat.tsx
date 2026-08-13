@@ -1,14 +1,22 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import type { FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, User, Bot, Loader2, MessageSquare, Copy, Check, Square, RefreshCw, BookOpen } from 'lucide-react';
+import { Loader2, Copy, Check, Square, RefreshCw, BookOpen, FileText, FilePlus, Sparkles, ArrowRight, Search, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
+import { Popover, Transition } from '@headlessui/react';
+import { Fragment } from 'react';
 import './Chat.css';
+
+interface Document {
+  id: string;
+  title: string;
+  file_name: string;
+}
 
 interface Citation {
   id: number;
@@ -29,6 +37,7 @@ interface Conversation {
   id: string;
   title: string;
   messages: Message[];
+  documents?: Document[];
 }
 
 const copyToClipboard = (text: string, callback?: () => void) => {
@@ -80,14 +89,14 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
   );
 };
 
-const MessageItem = memo(({ 
-  msg, 
+const MessageItem = memo(({
+  msg,
   isTypingIndicator,
   isLast,
   isGenerating,
   onRegenerate
-}: { 
-  msg?: Message, 
+}: {
+  msg?: Message,
   isTypingIndicator?: boolean,
   isLast?: boolean,
   isGenerating?: boolean,
@@ -96,15 +105,14 @@ const MessageItem = memo(({
   if (isTypingIndicator) {
     return (
       <div className="message-wrapper assistant animate-fade-in">
-        <div className="message-avatar bot-avatar">
-          <Bot size={20} />
+        <div className="nova-avatar small">
+          <Sparkles size={14} />
         </div>
         <div className="message-content">
-          <div className="message-header">
-            <span className="message-author">Nova</span>
-          </div>
-          <div className="message-bubble typing-indicator">
-            Thinking<span className="dot">.</span><span className="dot">.</span><span className="dot">.</span>
+          <div className="assistant-bubble">
+            <div className="typing-indicator">
+              <Loader2 size={16} className="spin-icon" /> Analyzing data, please wait...
+            </div>
           </div>
         </div>
       </div>
@@ -114,38 +122,40 @@ const MessageItem = memo(({
   if (!msg) return null;
 
   const isUser = msg.role === 'user';
-  const timeString = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
   return (
-    <div className={`message-wrapper ${msg.role} animate-fade-in`}>
-      <div className={`message-avatar ${isUser ? 'user-avatar' : 'bot-avatar'}`}>
-        {isUser ? <User size={18} /> : <Bot size={18} />}
-      </div>
-      <div className="message-content">
-        <div className="message-header">
-          <span className="message-author">{isUser ? 'You' : 'Nova'}</span>
-          {timeString && <span className="message-time">{timeString}</span>}
+    <div className={`message-wrapper ${isUser ? 'user' : 'assistant'} animate-fade-in`}>
+      {!isUser && (
+        <div className="nova-avatar small">
+          <Sparkles size={14} />
         </div>
-        <div className={`message-bubble ${isLast && isGenerating ? 'streaming' : ''}`}>
+      )}
+      <div className="message-content">
+        <div className={isUser ? 'user-bubble' : 'assistant-bubble'}>
           {msg.role === 'assistant' ? (
             <>
-              <ReactMarkdown 
+              <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{ code: CodeBlock }}
               >
                 {msg.content}
               </ReactMarkdown>
-              
+
               {msg.citations && msg.citations.length > 0 && (
                 <div className="message-citations">
                   <div className="citations-header">
-                    <BookOpen size={14} /> <span>Sources Used</span>
+                    <BookOpen size={14} /> <span>Sources</span>
                   </div>
                   <ul className="citations-list">
                     {msg.citations.map((c, idx) => (
-                      <li key={idx} className="citation-item">
-                        <span className="citation-number">[{idx + 1}]</span>
-                        <span className="citation-title" title={c.title}>{c.title}</span>
+                      <li key={idx} className="citation-card">
+                        <div className="citation-title-row">
+                          <FileText size={14} className="text-muted" />
+                          <span>{c.title}</span>
+                        </div>
+                        {c.metadata && c.metadata.page_number && (
+                          <div className="citation-pages">Page {c.metadata.page_number}</div>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -158,16 +168,16 @@ const MessageItem = memo(({
         </div>
         {msg.role === 'assistant' && msg.content && (
           <div className="message-actions">
-            <button 
-              className="copy-response-btn" 
+            <button
+              className="copy-response-btn"
               onClick={() => copyToClipboard(msg.content)}
               title="Copy entire response"
             >
               <Copy size={13} /> Copy
             </button>
             {isLast && !isGenerating && onRegenerate && (
-              <button 
-                className="copy-response-btn regenerate-btn" 
+              <button
+                className="copy-response-btn regenerate-btn"
                 onClick={onRegenerate}
                 title="Regenerate Response"
               >
@@ -190,13 +200,16 @@ const MessageItem = memo(({
 export const Chat: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
-  
+  const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
+  const [attachedDocs, setAttachedDocs] = useState<Document[]>([]);
+  const [docSearchTerm, setDocSearchTerm] = useState('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -209,13 +222,14 @@ export const Chat: FC = () => {
       }
     };
   }, []);
-  
+
   const isNewChat = id === 'new' || !id;
 
   const loadConversation = useCallback(async () => {
     try {
       const data = await apiClient.get<Conversation>(`/api/v1/conversations/${id}`);
       setMessages(data.messages || []);
+      setAttachedDocs(data.documents || []);
       setIsAutoScrollPaused(false);
     } catch (err) {
       console.error('Failed to load conversation', err);
@@ -223,13 +237,24 @@ export const Chat: FC = () => {
     }
   }, [id]);
 
+  const loadDocuments = useCallback(async () => {
+    try {
+      const data = await apiClient.get<Document[]>('/api/v1/documents/');
+      setAvailableDocs(data);
+    } catch (err) {
+      console.error('Failed to load documents', err);
+    }
+  }, []);
+
   useEffect(() => {
+    loadDocuments();
     if (!isNewChat) {
       loadConversation();
     } else {
       setMessages([]);
+      setAttachedDocs([]);
     }
-  }, [id, isNewChat, loadConversation]);
+  }, [id, isNewChat, loadConversation, loadDocuments]);
 
   // Scroll behavior
   const handleScroll = () => {
@@ -263,16 +288,16 @@ export const Chat: FC = () => {
     if (!text.trim() || isTyping || isGenerating) return;
 
     const userText = text.trim();
-    
+
     // Optimistic UI for user message
     const tempUserMsgId = Date.now().toString();
-    setMessages(prev => [...prev, { 
-      id: tempUserMsgId, 
-      role: 'user', 
-      content: userText, 
-      created_at: new Date().toISOString() 
+    setMessages(prev => [...prev, {
+      id: tempUserMsgId,
+      role: 'user',
+      content: userText,
+      created_at: new Date().toISOString()
     }]);
-    
+
     let activeConversationId = id;
     setIsTyping(true);
     setIsGenerating(true);
@@ -285,6 +310,12 @@ export const Chat: FC = () => {
           title: userText.slice(0, 40) + (userText.length > 40 ? '...' : '')
         });
         activeConversationId = newConv.id;
+
+        // Attach any selected documents
+        for (const doc of attachedDocs) {
+          await apiClient.post(`/api/v1/conversations/${activeConversationId}/documents/${doc.id}`, {});
+        }
+
         navigate(`/chat/${activeConversationId}`, { replace: true });
       }
 
@@ -297,8 +328,11 @@ export const Chat: FC = () => {
 
       // Start stream
       const stream = apiClient.stream(
-        `/api/v1/conversations/${activeConversationId}/messages`, 
-        { message: userText },
+        `/api/v1/conversations/${activeConversationId}/messages`,
+        {
+          message: userText,
+          document_ids: attachedDocs.map(d => d.id)
+        },
         { signal: abortControllerRef.current.signal }
       );
 
@@ -307,23 +341,23 @@ export const Chat: FC = () => {
         if (!firstChunkReceived) {
           setIsTyping(false);
           firstChunkReceived = true;
-          setMessages(prev => [...prev, { 
-            id: tempAssistantMsgId, 
-            role: 'assistant', 
+          setMessages(prev => [...prev, {
+            id: tempAssistantMsgId,
+            role: 'assistant',
             content: chunk,
-            created_at: new Date().toISOString() 
+            created_at: new Date().toISOString()
           }]);
         } else {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === tempAssistantMsgId 
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempAssistantMsgId
                 ? { ...msg, content: msg.content + chunk }
                 : msg
             )
           );
         }
       }
-      
+
     } catch (err: any) {
       console.error('Failed to send message', err);
       if (err.name !== 'AbortError') {
@@ -352,27 +386,53 @@ export const Chat: FC = () => {
     }
   };
 
+  const handleToggleDocument = async (doc: Document) => {
+    const isAttached = attachedDocs.some(d => d.id === doc.id);
+
+    if (isNewChat) {
+      // Just update local state
+      if (isAttached) {
+        setAttachedDocs(prev => prev.filter(d => d.id !== doc.id));
+      } else {
+        setAttachedDocs(prev => [...prev, doc]);
+      }
+    } else {
+      // API call to attach/detach
+      try {
+        if (isAttached) {
+          await apiClient.delete(`/api/v1/conversations/${id}/documents/${doc.id}`);
+          setAttachedDocs(prev => prev.filter(d => d.id !== doc.id));
+        } else {
+          await apiClient.post(`/api/v1/conversations/${id}/documents/${doc.id}`, {});
+          setAttachedDocs(prev => [...prev, doc]);
+        }
+      } catch (err) {
+        toast.error('Failed to update document attachments');
+      }
+    }
+  };
+
   return (
     <div className="chat-page">
-      <div 
-        className="chat-messages-container" 
+      <div
+        className="chat-messages-container"
         ref={chatContainerRef}
         onScroll={handleScroll}
       >
         {isNewChat && messages.length === 0 ? (
           <div className="chat-empty-state animate-fade-in">
-            <div className="chat-empty-icon-wrapper">
-              <MessageSquare size={48} className="text-primary" />
+            <div className="nova-avatar large">
+              <Sparkles size={32} />
             </div>
-            <h2>How can I help you today?</h2>
-            <p className="text-muted">Ask questions about your uploaded documents to get started.</p>
+            <h2>ASK NOVA</h2>
+            <p className="text-muted mt-2">Ask questions, explore your documents, and get answers grounded in your knowledge.</p>
           </div>
         ) : (
           <div className="messages-list">
             {messages.map((msg, idx) => (
-              <MessageItem 
-                key={msg.id} 
-                msg={msg} 
+              <MessageItem
+                key={msg.id}
+                msg={msg}
                 isLast={idx === messages.length - 1}
                 isGenerating={isGenerating}
                 onRegenerate={handleRegenerate}
@@ -387,8 +447,8 @@ export const Chat: FC = () => {
       <div className="chat-input-container">
         {isGenerating && (
           <div className="stop-generation-container">
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="stop-generation-btn"
               onClick={() => abortControllerRef.current?.abort()}
             >
@@ -398,28 +458,110 @@ export const Chat: FC = () => {
         )}
         <form onSubmit={handleSubmit} className="chat-input-form">
           <div className="chat-input-wrapper">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything (Shift+Enter for new line)..."
-              disabled={isTyping}
-              className="chat-input-textarea"
-              rows={1}
-              autoFocus
-            />
-            <button 
-              type="submit" 
-              className="btn btn-primary chat-submit-btn"
-              disabled={!input.trim() || isTyping || isGenerating}
-            >
-              {isTyping || isGenerating ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
-            </button>
+            {attachedDocs.length > 0 && (
+              <div className="attachments-bar">
+                {attachedDocs.map(doc => (
+                  <div key={doc.id} className="attachment-chip">
+                    <FileText size={12} className="text-muted" />
+                    <span className="truncate max-w-[150px]" title={doc.title}>{doc.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDocument(doc)}
+                      className="chip-remove ml-1"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="input-row">
+              <Popover className="relative">
+                <Popover.Button className="composer-icon-btn" title="Attach Document">
+                  <FilePlus size={20} />
+                </Popover.Button>
+                <Transition
+                  as={Fragment}
+                  enter="transition ease-out duration-200"
+                  enterFrom="opacity-0 translate-y-1"
+                  enterTo="opacity-100 translate-y-0"
+                  leave="transition ease-in duration-150"
+                  leaveFrom="opacity-100 translate-y-0"
+                  leaveTo="opacity-0 translate-y-1"
+                >
+                  <Popover.Panel className="document-picker-panel">
+                    <div className="document-picker-search">
+                      <Search size={16} className="text-muted" />
+                      <input
+                        type="text"
+                        placeholder="Search documents..."
+                        value={docSearchTerm}
+                        onChange={(e) => setDocSearchTerm(e.target.value)}
+                        className="document-search-input"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="document-picker-list">
+                      {availableDocs.filter(d =>
+                        d.title.toLowerCase().includes(docSearchTerm.toLowerCase()) ||
+                        d.file_name.toLowerCase().includes(docSearchTerm.toLowerCase())
+                      ).length === 0 ? (
+                        <div className="document-picker-empty">No documents found.</div>
+                      ) : (
+                        availableDocs
+                          .filter(d =>
+                            d.title.toLowerCase().includes(docSearchTerm.toLowerCase()) ||
+                            d.file_name.toLowerCase().includes(docSearchTerm.toLowerCase())
+                          )
+                          .map(doc => {
+                          const isSelected = attachedDocs.some(d => d.id === doc.id);
+                          return (
+                            <button
+                              key={doc.id}
+                              type="button"
+                              onClick={() => handleToggleDocument(doc)}
+                              className="document-picker-row"
+                            >
+                              <div className={`document-checkbox ${isSelected ? 'selected' : ''}`}>
+                                {isSelected && <Check size={12} />}
+                              </div>
+                              <div className="document-info">
+                                <div className="document-title truncate">{doc.title}</div>
+                                <div className="document-meta truncate">{doc.file_name}</div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </Popover.Panel>
+                </Transition>
+              </Popover>
+
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask, write or search for anything..."
+                disabled={isTyping}
+                className="chat-input-textarea"
+                rows={1}
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="chat-submit-btn"
+                disabled={!input.trim() || isTyping || isGenerating}
+              >
+                {isTyping || isGenerating ? <Loader2 size={16} className="spin-icon" /> : <ArrowRight size={16} />}
+              </button>
+            </div>
           </div>
         </form>
-        <div className="chat-footer-text text-muted">
-          AI can make mistakes. Consider verifying important information.
+        <div className="chat-footer-text">
+          Nova can make mistakes. Verify important information.
         </div>
       </div>
     </div>

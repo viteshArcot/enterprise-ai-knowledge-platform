@@ -22,17 +22,19 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: Annotated[UploadFile, File(...)],
     title: Annotated[str | None, Form()] = None,
+    force: Annotated[bool, Form()] = False,
     document_service: DocumentService = Depends(get_document_service),
 ):
     """Upload a document to be ingested."""
     # Ensure a directory exists for storage
     upload_dir = str(settings.UPLOAD_DIRECTORY)
     os.makedirs(upload_dir, exist_ok=True)
-    
+
     import uuid
-    safe_filename = f"{uuid.uuid4().hex}_{file.filename or 'unknown'}"
+    # Use only UUID for the physical storage filename to prevent path traversal
+    safe_filename = uuid.uuid4().hex
     file_path = os.path.join(upload_dir, safe_filename)
-    
+
     # Compute SHA256 incrementally and save the file
     sha256_hash = hashlib.sha256()
     file_size = 0
@@ -49,12 +51,12 @@ async def upload_document(
                     pass
                 from app.core.exceptions import FileTooLargeError
                 raise FileTooLargeError(settings.MAX_UPLOAD_SIZE_BYTES)
-            
+
     file_hash = sha256_hash.hexdigest()
 
     # Check for duplicate
     existing_doc = await document_service.get_document_by_hash(file_hash)
-    if existing_doc:
+    if existing_doc and not force:
         # File exists, remove the duplicate uploaded file
         if os.path.exists(file_path):
             try:
@@ -62,24 +64,25 @@ async def upload_document(
             except OSError as e:
                 import logging
                 logging.getLogger("app.api").warning(f"Failed to remove duplicate temp file {file_path}: {e}")
-            
+
         import logging
         logging.getLogger("app.api").info(
             "document_duplicate_detected",
             extra={"file_hash": file_hash, "existing_id": str(existing_doc.id)}
         )
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "is_duplicate": True,
+
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Document already exists.",
                 "existing_document_id": str(existing_doc.id),
-                "message": "Document already exists."
+                "is_duplicate": True
             }
         )
 
     # Need the full content for the parsing in background (since process_document_async takes bytes)
-    # Actually wait, `process_document_async` currently takes `content: bytes`. 
+    # Actually wait, `process_document_async` currently takes `content: bytes`.
     # Let's read it back into memory for the background task for now, as that's how it's currently built.
     with open(file_path, "rb") as f:
         file_content = f.read()
@@ -95,6 +98,9 @@ async def upload_document(
         file_path=file_path,
         metadata_={"file_hash": file_hash}
     )
+    # also set the column explicitly since it's a top-level column now
+    document.file_hash = file_hash
+    await document_service._document_repo._session.commit()
 
     # Process in background
     background_tasks.add_task(
@@ -127,19 +133,19 @@ async def download_document(
     import logging
     from fastapi.responses import FileResponse
     from fastapi import HTTPException
-    
+
     doc = await document_service.get_document(document_id)
     file_path = doc.file_path
-    
+
     if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
         fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
         if os.path.exists(fallback_path):
             file_path = fallback_path
-    
+
     if not file_path or not os.path.exists(file_path):
         logging.getLogger("app.api").warning("document_download_failed_not_found", extra={"document_id": str(document_id)})
         raise HTTPException(status_code=404, detail="File not found on server.")
-        
+
     logging.getLogger("app.api").info("document_downloaded", extra={"document_id": str(document_id)})
     return FileResponse(path=file_path, filename=doc.file_name, media_type=doc.file_type)
 
@@ -153,31 +159,31 @@ async def reindex_document(
     """Reindex a document."""
     import logging
     from fastapi import HTTPException
-    
+
     try:
         doc = await document_service.reindex_document(document_id)
-        
+
         import os
         file_path = doc.file_path
-        
+
         if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
             fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
             if os.path.exists(fallback_path):
                 file_path = fallback_path
-                
+
         if not file_path or not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Physical file missing, cannot reindex.")
-            
+
         with open(file_path, "rb") as f:
             file_content = f.read()
-            
+
         background_tasks.add_task(
             document_service.process_document_async,
             document_id=doc.id,
             content=file_content,
             file_name=doc.file_name,
         )
-        
+
         logging.getLogger("app.api").info("document_reindex_requested", extra={"document_id": str(document_id)})
         return doc
     except ValueError as e:

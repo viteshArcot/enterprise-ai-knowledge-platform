@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from tests.evaluation.evaluator import calculate_metrics_for_question
 
 def test_recall_at_1():
-    expected_pages = {12}
+    expected_pages = [{12}]
     retrieved_chunks = [
         {"rank": 1, "page_number": 12},
         {"rank": 2, "page_number": 20},
@@ -18,7 +18,7 @@ def test_recall_at_1():
     assert res["is_complete"] is True
 
 def test_recall_at_k():
-    expected_pages = {24}
+    expected_pages = [{24}]
     retrieved_chunks = [
         {"rank": i, "page_number": i} for i in range(1, 25)
     ]
@@ -31,7 +31,7 @@ def test_recall_at_k():
     assert res["is_complete"] is True
 
 def test_no_relevant_result():
-    expected_pages = {99}
+    expected_pages = [{99}]
     retrieved_chunks = [
         {"rank": i, "page_number": i} for i in range(1, 20)
     ]
@@ -43,7 +43,7 @@ def test_no_relevant_result():
     assert res["is_complete"] is False
 
 def test_partial_evidence_retrieval():
-    expected_pages = {12, 24}
+    expected_pages = [{12}, {24}]
     retrieved_chunks = [
         {"rank": 1, "page_number": 12},
         {"rank": 2, "page_number": 25},
@@ -55,7 +55,7 @@ def test_partial_evidence_retrieval():
     assert res["is_complete"] is False
 
 def test_complete_evidence_retrieval():
-    expected_pages = {12, 24}
+    expected_pages = [{12}, {24}]
     retrieved_chunks = [
         {"rank": 2, "page_number": 12},
         {"rank": 5, "page_number": 24},
@@ -67,7 +67,7 @@ def test_complete_evidence_retrieval():
     assert res["is_complete"] is True
 
 def test_duplicate_retrieved_chunks():
-    expected_pages = {10}
+    expected_pages = [{10}]
     retrieved_chunks = [
         {"rank": 1, "page_number": 10},
         {"rank": 2, "page_number": 10},
@@ -80,7 +80,7 @@ def test_duplicate_retrieved_chunks():
     assert len(res["found_expected_pages"]) == 1
 
 def test_empty_retrieval():
-    expected_pages = {1}
+    expected_pages = [{1}]
     retrieved_chunks = []
     res = calculate_metrics_for_question(expected_pages, retrieved_chunks)
     assert res["hit_at_5"] is False

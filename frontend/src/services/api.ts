@@ -8,7 +8,7 @@
  *   - Support for JSON, FormData, and Streaming (SSE)
  */
 
-const API_BASE_URL = ''; // Relative path leverages Vite/Nginx proxy
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''; // Use env var for prod, proxy for dev
 
 export interface ApiError extends Error {
   status: number;
@@ -34,12 +34,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
     throw createApiError(response.status, response.statusText, message);
   }
-  
+
   // If it's a 204 No Content or similar empty response
   if (response.status === 204 || response.headers.get('content-length') === '0') {
     return {} as T;
   }
-  
+
   return response.json() as Promise<T>;
 }
 
@@ -50,13 +50,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
-  get: <T>(path: string, options?: RequestInit) => 
+  get: <T>(path: string, options?: RequestInit) =>
     request<T>(path, { method: 'GET', ...options }),
 
   post: <T>(path: string, body: unknown, options?: RequestInit) => {
     const isFormData = body instanceof FormData;
     const headers = new Headers(options?.headers);
-    
+
     // Only set application/json if it's not FormData.
     // Let the browser set the boundary for FormData.
     if (!isFormData && !headers.has('Content-Type')) {
@@ -74,7 +74,7 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown, options?: RequestInit) => {
     const isFormData = body instanceof FormData;
     const headers = new Headers(options?.headers);
-    
+
     if (!isFormData && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
@@ -90,7 +90,7 @@ export const apiClient = {
   put: <T>(path: string, body: unknown, options?: RequestInit) => {
     const isFormData = body instanceof FormData;
     const headers = new Headers(options?.headers);
-    
+
     if (!isFormData && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
@@ -106,7 +106,7 @@ export const apiClient = {
   delete: <T>(path: string, options?: RequestInit) =>
     request<T>(path, { method: 'DELETE', ...options }),
 
-  upload: <T>(path: string, formData: FormData, options?: RequestInit) => 
+  upload: <T>(path: string, formData: FormData, options?: RequestInit) =>
     apiClient.post<T>(path, formData, options),
 
   /**

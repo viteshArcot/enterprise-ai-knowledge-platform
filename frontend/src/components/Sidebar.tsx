@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { FC } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { FileText, MessageSquarePlus, MessageSquare, Activity, Search, Edit2, Trash2, X, Check } from 'lucide-react';
+import { FileText, MessageSquarePlus, MessageSquare, Activity, Search, Edit2, Trash2, X, Check, Sparkles } from 'lucide-react';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -35,7 +35,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
         console.error('Failed to load conversations', err);
       }
     };
-    
+
     fetchConvos();
     return () => { mounted = false; };
   }, [location.pathname]);
@@ -51,7 +51,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     if (!editTitle.trim() || editTitle.trim() === conversations.find(c => c.id === id)?.title) {
       setEditingId(null);
       return;
@@ -59,7 +59,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
 
     const oldConvos = [...conversations];
     const newTitle = editTitle.trim();
-    
+
     setConversations(prev => prev.map(c => c.id === id ? { ...c, title: newTitle } : c));
     setEditingId(null);
 
@@ -84,7 +84,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
     e.preventDefault();
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this conversation?')) return;
-    
+
     try {
       await apiClient.delete(`/api/v1/conversations/${id}`);
       setConversations(prev => prev.filter(c => c.id !== id));
@@ -138,7 +138,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
   }, [filteredConvos]);
 
   const hasGroups = Object.keys(groupedConvos).some(k => k !== 'Recent Chats' && groupedConvos[k as keyof typeof groupedConvos].length > 0);
-  
+
   // Render groups
   const renderGroup = (title: string, convos: Conversation[]) => {
     if (convos.length === 0) return null;
@@ -148,7 +148,7 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
         <nav className="sidebar-nav">
           {convos.map(conv => (
             <div key={conv.id} className="sidebar-chat-item">
-              <NavLink 
+              <NavLink
                 to={`/chat/${conv.id}`}
                 className={({ isActive }) => `sidebar-link chat-link ${isActive ? 'active' : ''}`}
                 title={conv.title}
@@ -201,20 +201,20 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <div className="logo">
-          <span className="logo-icon">⬡</span>
+          <span className="logo-icon"><Sparkles size={18} /></span>
           <span className="logo-text">AI Knowledge</span>
         </div>
         <button className="mobile-close-btn" onClick={onClose}>
           <X size={20} />
         </button>
       </div>
-      
+
       <div className="sidebar-search-container">
         <div className="search-input-wrapper">
           <Search size={16} className="search-icon" />
-          <input 
-            type="text" 
-            placeholder="Search chats..." 
+          <input
+            type="text"
+            placeholder="Search chats..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="sidebar-search-input"
@@ -224,8 +224,8 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       <div className="sidebar-scrollable">
         <nav className="sidebar-nav">
-          <NavLink 
-            to="/" 
+          <NavLink
+            to="/"
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             end
             onClick={onClose}
@@ -233,16 +233,16 @@ export const Sidebar: FC<SidebarProps> = ({ isOpen, onClose }) => {
             <FileText size={18} />
             Documents
           </NavLink>
-          <NavLink 
-            to="/chat/new" 
+          <NavLink
+            to="/chat/new"
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             onClick={onClose}
           >
             <MessageSquarePlus size={18} />
             New Chat
           </NavLink>
-          <NavLink 
-            to="/status" 
+          <NavLink
+            to="/status"
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             onClick={onClose}
           >
