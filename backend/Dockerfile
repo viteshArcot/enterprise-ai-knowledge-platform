@@ -46,6 +46,9 @@ RUN groupadd --system appgroup && \
 
 WORKDIR /app
 
+RUN mkdir -p /app/uploads && \
+    chown appuser:appgroup /app/uploads
+
 COPY --from=test-builder /install /usr/local
 
 COPY --chown=appuser:appgroup app/ ./app/
@@ -81,6 +84,9 @@ RUN groupadd --system appgroup && \
     useradd --system --gid appgroup --no-create-home appuser
 
 WORKDIR /app
+
+RUN mkdir -p /app/uploads && \
+    chown appuser:appgroup /app/uploads
 
 COPY --from=builder /install /usr/local
 
