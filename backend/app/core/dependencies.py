@@ -8,27 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import Settings, get_settings
 from app.database.session import get_session
-
-from app.repositories.document import DocumentRepository
-from app.repositories.chunk import ChunkRepository
-from app.repositories.conversation import ConversationRepository
-from app.repositories.message import MessageRepository
-
-from app.ingestion.parsers.registry import ParserRegistry
 from app.ingestion.chunking.recursive import RecursiveTokenChunker
-
+from app.ingestion.parsers.registry import ParserRegistry
 from app.providers.embedding.base import EmbeddingGateway
 
 # IMPORTANT
 from app.providers.llm.base import LLMGateway
 from app.providers.llm.factory import create_llm_gateway
-
 from app.providers.reranker.base import RerankerGateway
 from app.providers.reranker.factory import create_reranker_gateway
-
+from app.repositories.chunk import ChunkRepository
+from app.repositories.conversation import ConversationRepository
+from app.repositories.document import DocumentRepository
+from app.repositories.message import MessageRepository
+from app.services.chat import ChatService
 from app.services.document import DocumentService
 from app.services.search import SearchService
-from app.services.chat import ChatService
+from app.services.storage import StorageGateway, SupabaseStorageGateway
 
 
 def get_app_settings() -> Settings:
@@ -111,6 +107,10 @@ def get_reranker_gateway(settings: AppSettings) -> RerankerGateway:
 # Services
 # ---------------------------------------------------------------------------
 
+def get_storage_gateway() -> StorageGateway:
+    return SupabaseStorageGateway()
+
+
 
 def get_document_service(
     document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
@@ -121,6 +121,7 @@ def get_document_service(
         EmbeddingGateway,
         Depends(get_embedding_gateway),
     ],
+    storage_gateway: Annotated[StorageGateway, Depends(get_storage_gateway)],
 ) -> DocumentService:
     return DocumentService(
         document_repo=document_repo,
@@ -128,6 +129,7 @@ def get_document_service(
         parser_registry=parser_registry,
         chunker=chunker,
         embedding_gateway=embedding_gateway,
+        storage_gateway=storage_gateway,
     )
 
 
@@ -168,10 +170,15 @@ def get_chat_service(
         LLMGateway,
         Depends(get_llm_gateway),
     ],
+    storage_gateway: Annotated[
+        StorageGateway,
+        Depends(get_storage_gateway),
+    ],
 ) -> ChatService:
     return ChatService(
         conversation_repo=conversation_repo,
         message_repo=message_repo,
         search_service=search_service,
         llm_gateway=llm_gateway,
+        storage_gateway=storage_gateway,
     )

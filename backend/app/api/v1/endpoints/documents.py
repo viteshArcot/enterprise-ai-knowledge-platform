@@ -5,17 +5,17 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
-from fastapi.responses import JSONResponse
 
+from app.config.settings import settings
 from app.core.dependencies import get_document_service
 from app.schemas.document import DocumentResponse
 from app.services.document import DocumentService
-from app.config.settings import settings
 
 router = APIRouter()
 
 
 import hashlib
+
 
 @router.post("/", response_model=DocumentResponse, status_code=202)
 async def upload_document(
@@ -102,6 +102,26 @@ async def upload_document(
     document.file_hash = file_hash
     await document_service._document_repo._session.commit()
 
+    # Upload to persistent storage before starting background ingestion
+    storage_path = f"documents/{document.id}/{safe_filename}"
+    try:
+        await document_service._storage_gateway.upload(
+            path=storage_path,
+            content=file_content,
+            content_type=file.content_type or "application/octet-stream"
+        )
+    except Exception as e:
+        # Cleanup if persistent upload fails
+        import logging
+        logging.getLogger("app.api").error(f"Failed to upload document {document.id} to persistent storage: {e}")
+        await document_service.delete_document(document.id)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Failed to persist document to storage.")
+
+    # Update the storage path in the database
+    document.storage_path = storage_path
+    await document_service._document_repo._session.commit()
+
     # Process in background
     background_tasks.add_task(
         document_service.process_document_async,
@@ -129,10 +149,11 @@ async def download_document(
     document_service: DocumentService = Depends(get_document_service),
 ):
     """Download the original document file."""
-    import os
     import logging
-    from fastapi.responses import FileResponse
+    import os
+
     from fastapi import HTTPException
+    from fastapi.responses import FileResponse
 
     doc = await document_service.get_document(document_id)
     file_path = doc.file_path
@@ -158,6 +179,7 @@ async def reindex_document(
 ) -> DocumentResponse:
     """Reindex a document."""
     import logging
+
     from fastapi import HTTPException
 
     try:

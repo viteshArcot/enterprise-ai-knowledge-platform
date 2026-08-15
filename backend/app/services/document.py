@@ -1,7 +1,6 @@
 """Document service."""
 
 import uuid
-from typing import Any
 
 from app.core.exceptions import IngestionError, NotFoundError
 from app.ingestion.chunking.recursive import RecursiveTokenChunker
@@ -13,6 +12,7 @@ from app.repositories.document import DocumentRepository
 from app.schemas.chunk import ChunkCreate
 from app.schemas.document import DocumentCreate, DocumentUpdate
 from app.services.base import BaseService
+from app.services.storage import StorageGateway
 
 
 class DocumentService(BaseService):
@@ -25,6 +25,7 @@ class DocumentService(BaseService):
         parser_registry: ParserRegistry,
         chunker: RecursiveTokenChunker,
         embedding_gateway: EmbeddingGateway,
+        storage_gateway: StorageGateway,
     ) -> None:
         super().__init__()
         self._document_repo = document_repo
@@ -32,6 +33,7 @@ class DocumentService(BaseService):
         self._parser_registry = parser_registry
         self._chunker = chunker
         self._embedding_gateway = embedding_gateway
+        self._storage_gateway = storage_gateway
 
     async def create_document(
         self, title: str, file_name: str, file_type: str, file_size_bytes: int, file_path: str, metadata_: dict | None = None
@@ -95,7 +97,7 @@ class DocumentService(BaseService):
                                 )
                             )
                         chunk_index += len(text_chunks)
-                    
+
                     # Visual representation for this page
                     if page.image_base64:
                         chunks_to_persist.append(
@@ -139,7 +141,7 @@ class DocumentService(BaseService):
                     ])
                 else:
                     inputs_to_embed.append(chunk_create.content)
-            
+
             embeddings = await self._embedding_gateway.embed(inputs_to_embed)
 
             # 4. Persistence
@@ -155,7 +157,7 @@ class DocumentService(BaseService):
             # Retrieve the document again to get current metadata
             doc = await self._document_repo.get_by_id(document_id)
             current_metadata = doc.metadata_ if doc and doc.metadata_ else {}
-            
+
             await self._document_repo.update(
                 document_id,
                 DocumentUpdate(
@@ -196,24 +198,31 @@ class DocumentService(BaseService):
         if not doc:
             self._logger.info("document_delete_skipped_not_found", document_id=str(document_id))
             return
-            
-        from app.config.settings import settings
+
         import os
-        
+
+        from app.config.settings import settings
+
         file_path = doc.file_path
-        
+
         if file_path and not os.path.exists(file_path) and file_path.startswith("/tmp/uploads/"):
             fallback_path = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
             if os.path.exists(fallback_path):
                 file_path = fallback_path
-                
+
         success = await self._document_repo.delete(document_id)
         if success:
             await self._document_repo._session.commit()
-            
+
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
-                
+
+            if doc.storage_path:
+                try:
+                    await self._storage_gateway.delete(doc.storage_path)
+                except Exception as e:
+                    self._logger.warning("document_storage_delete_failed", document_id=str(document_id), error=str(e))
+
             self._logger.info("document_deleted", document_id=str(document_id))
         else:
             self._logger.warning("document_delete_failed", document_id=str(document_id))
@@ -223,10 +232,10 @@ class DocumentService(BaseService):
         doc = await self.get_document(document_id)
         if doc.status in (DocumentStatus.UPLOADING, DocumentStatus.PROCESSING):
             raise ValueError(f"Document {document_id} is already being processed (status: {doc.status}).")
-            
+
         # Delete existing chunks
         await self._chunk_repo.delete_by_document_id(document_id)
-        
+
         # Reset status
         await self._document_repo.update(
             document_id,
@@ -238,6 +247,6 @@ class DocumentService(BaseService):
         )
         await self._document_repo._session.commit()
         await self._document_repo._session.refresh(doc)
-        
+
         self._logger.info("document_reindex_started", document_id=str(document_id))
         return doc

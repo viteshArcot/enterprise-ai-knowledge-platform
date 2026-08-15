@@ -1,21 +1,21 @@
 """Chat service."""
 
+import os
+import string
+import tempfile
 import uuid
 from collections.abc import AsyncGenerator
-import string
-import os
+
 import fitz
 
 from app.core.exceptions import NotFoundError, ProviderError, ProviderTimeoutError
 from app.models.conversation import Conversation
 from app.models.message import MessageRole
-from app.providers.llm.base import LLMGateway, PromptMessage
+from app.providers.llm.base import ImageAttachment, LLMGateway, PromptMessage
 from app.repositories.conversation import ConversationRepository
 from app.repositories.message import MessageRepository
 from app.schemas.conversation import ConversationCreate, MessageCreate
 from app.services.base import BaseService
-from app.providers.llm.base import ImageAttachment
-from app.config.settings import settings
 from app.services.search import SearchService
 
 SYSTEM_PROMPT = """You are an Enterprise AI Knowledge Assistant.
@@ -33,12 +33,14 @@ class ChatService(BaseService):
         message_repo: MessageRepository,
         search_service: SearchService,
         llm_gateway: LLMGateway,
+        storage_gateway: "StorageGateway",
     ) -> None:
         super().__init__()
         self._conversation_repo = conversation_repo
         self._message_repo = message_repo
         self._search_service = search_service
         self._llm_gateway = llm_gateway
+        self._storage_gateway = storage_gateway
 
     async def create_conversation(self, title: str | None = None) -> Conversation:
         """Create a new conversation."""
@@ -74,8 +76,9 @@ class ChatService(BaseService):
 
     async def attach_document(self, conversation_id: uuid.UUID, document_id: uuid.UUID) -> Conversation:
         """Attach a document to a conversation."""
-        from app.models.document import Document
         from sqlalchemy import select
+
+        from app.models.document import Document
 
         conversation = await self.get_conversation(conversation_id)
         doc = await self._conversation_repo._session.scalar(select(Document).where(Document.id == document_id))
@@ -135,41 +138,63 @@ class ChatService(BaseService):
             citations = []
             visual_attachments = []
             rendered_pages = set()
+            downloaded_pdfs: dict[str, str] = {}
 
-            for i, res in enumerate(search_results, start=1):
-                context_parts.append(f"--- Document: {res.document_title} ---\n{res.content}")
-                citations.append(
-                    {"id": i, "title": res.document_title, "score": res.score, "metadata": res.metadata}
-                )
+            try:
+                for i, res in enumerate(search_results, start=1):
+                    context_parts.append(f"--- Document: {res.document_title} ---\n{res.content}")
+                    citations.append(
+                        {"id": i, "title": res.document_title, "score": res.score, "metadata": res.metadata}
+                    )
 
-                if res.metadata.get("source_type") == "visual" and res.file_path and res.page_number is not None:
-                    self._logger.debug("visual_context_detected", document_id=str(res.metadata.get("document_id", "unknown")), page_number=res.page_number)
-                    doc_page_key = (res.file_path, res.page_number)
-                    # Limit the maximum number of images we attach per request
-                    if doc_page_key not in rendered_pages and len(visual_attachments) < 5:
-                        file_path = res.file_path
-                        if file_path.startswith("/tmp/uploads/") and not os.path.exists(file_path):
-                            fallback = os.path.join(str(settings.UPLOAD_DIRECTORY), os.path.basename(file_path))
-                            if os.path.exists(fallback):
-                                file_path = fallback
+                    if res.metadata.get("source_type") == "visual" and res.page_number is not None:
+                        storage_path = res.storage_path
+                        if not storage_path:
+                            self._logger.warning("visual_context_skipped", document_id=str(res.metadata.get("document_id", "unknown")), reason="Missing storage_path")
+                            continue
 
-                        if os.path.exists(file_path):
-                            try:
-                                with fitz.open(file_path) as pdf_doc:
-                                    page_index = res.page_number - 1
-                                    if 0 <= page_index < pdf_doc.page_count:
-                                        page = pdf_doc.load_page(page_index)
-                                        pix = page.get_pixmap(matrix=fitz.Matrix(1.0, 1.0))
-                                        img_data = pix.tobytes("png")
-                                        visual_attachments.append(ImageAttachment(data=img_data, mime_type="image/png"))
-                                        rendered_pages.add(doc_page_key)
-                                        self._logger.info("visual_context_attached", page_number=res.page_number)
-                                    else:
-                                        self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason="invalid page number")
-                            except Exception as exc:
-                                self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason=str(exc))
-                        else:
-                            self._logger.warning("visual_context_failed", file_path=file_path, page_number=res.page_number, reason="file not found")
+                        self._logger.debug("visual_context_detected", storage_path=storage_path, page_number=res.page_number)
+                        doc_page_key = (storage_path, res.page_number)
+                        # Limit the maximum number of images we attach per request
+                        if doc_page_key not in rendered_pages and len(visual_attachments) < 5:
+                            temp_file_path = downloaded_pdfs.get(storage_path)
+
+                            if not temp_file_path:
+                                fd, temp_file_path = tempfile.mkstemp(suffix=".pdf")
+                                os.close(fd)
+                                try:
+                                    await self._storage_gateway.download_to_file(storage_path, temp_file_path)
+                                    downloaded_pdfs[storage_path] = temp_file_path
+                                except Exception as e:
+                                    self._logger.warning("visual_context_download_failed", storage_path=storage_path, reason=str(e))
+                                    if os.path.exists(temp_file_path):
+                                        os.remove(temp_file_path)
+                                    temp_file_path = None
+
+                            if temp_file_path and os.path.exists(temp_file_path):
+                                try:
+                                    with fitz.open(temp_file_path) as pdf_doc:
+                                        page_index = res.page_number - 1
+                                        if 0 <= page_index < pdf_doc.page_count:
+                                            page = pdf_doc.load_page(page_index)
+                                            pix = page.get_pixmap(matrix=fitz.Matrix(1.0, 1.0))
+                                            img_data = pix.tobytes("png")
+                                            visual_attachments.append(ImageAttachment(data=img_data, mime_type="image/png"))
+                                            rendered_pages.add(doc_page_key)
+                                            self._logger.info("visual_context_attached", page_number=res.page_number)
+                                        else:
+                                            self._logger.warning("visual_context_failed", storage_path=storage_path, page_number=res.page_number, reason="invalid page number")
+                                except Exception as exc:
+                                    self._logger.warning("visual_context_failed", storage_path=storage_path, page_number=res.page_number, reason=str(exc))
+                            else:
+                                self._logger.warning("visual_context_failed", storage_path=storage_path, page_number=res.page_number, reason="file not found")
+            finally:
+                for temp_file in downloaded_pdfs.values():
+                    if temp_file and os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                        except OSError:
+                            pass
 
             context_text = "\n\n".join(context_parts)
 
@@ -184,8 +209,8 @@ class ChatService(BaseService):
             augmented_prompt = f"Context:\n{context_text}\n\nUser Question: {user_message}"
             prompt_messages.append(PromptMessage(role="user", content=augmented_prompt, images=visual_attachments if visual_attachments else None))
         except Exception as e:
-            self._logger.error(f"Context retrieval error: {str(e)}", exc_info=True, conversation_id=str(conversation_id))
-            error_msg = f"\n\n[System: Document retrieval failed: {str(e)}]"
+            self._logger.error(f"Context retrieval error: {e!s}", exc_info=True, conversation_id=str(conversation_id))
+            error_msg = f"\n\n[System: Document retrieval failed: {e!s}]"
             yield error_msg
             await self._message_repo.create(
                 MessageCreate(
@@ -212,19 +237,19 @@ class ChatService(BaseService):
             async for chunk in self._llm_gateway.stream(prompt_messages):
                 full_response += chunk
                 yield chunk
-        except ProviderTimeoutError as e:
+        except ProviderTimeoutError:
             self._logger.error("Provider timeout", exc_info=True, conversation_id=str(conversation_id))
             error_msg = "\n\n[System: The AI provider timed out. Please try again.]"
             full_response += error_msg
             yield error_msg
         except ProviderError as e:
-            self._logger.error(f"Provider error: {str(e)}", exc_info=True, conversation_id=str(conversation_id))
-            error_msg = f"\n\n[System: AI provider error: {str(e)}]"
+            self._logger.error(f"Provider error: {e!s}", exc_info=True, conversation_id=str(conversation_id))
+            error_msg = f"\n\n[System: AI provider error: {e!s}]"
             full_response += error_msg
             yield error_msg
         except Exception as e:
-            self._logger.error(f"Unexpected error: {str(e)}", exc_info=True, conversation_id=str(conversation_id))
-            error_msg = f"\n\n[System: An unexpected error occurred: {str(e)}]"
+            self._logger.error(f"Unexpected error: {e!s}", exc_info=True, conversation_id=str(conversation_id))
+            error_msg = f"\n\n[System: An unexpected error occurred: {e!s}]"
             full_response += error_msg
             yield error_msg
         finally:

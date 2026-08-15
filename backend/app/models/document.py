@@ -29,6 +29,7 @@ class Document(UUIDMixin, TimestampMixin, Base):
     file_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    storage_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus, name="document_status"),
         default=DocumentStatus.UPLOADING,

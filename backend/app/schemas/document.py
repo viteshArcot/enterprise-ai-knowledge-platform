@@ -23,7 +23,7 @@ class DocumentBase(BaseModel):
 
 
 class DocumentCreate(DocumentBase):
-    pass
+    storage_path: str | None = None
 
 
 class DocumentUpdate(BaseModel):
@@ -32,6 +32,7 @@ class DocumentUpdate(BaseModel):
     metadata_: dict[str, Any] | None = None
     chunk_count: int | None = None
     error_message: str | None = None
+    storage_path: str | None = None
 
 
 class DocumentResponse(DocumentBase):

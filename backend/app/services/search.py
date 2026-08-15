@@ -1,8 +1,8 @@
 """Search service."""
 
+import uuid
 from dataclasses import dataclass
 from typing import Any
-import uuid
 
 from app.config.settings import Settings
 from app.providers.embedding.base import EmbeddingGateway
@@ -21,6 +21,7 @@ class SearchResult:
     metadata: dict[str, Any]
     file_path: str | None = None
     page_number: int | None = None
+    storage_path: str | None = None
 
 
 class SearchService(BaseService):
@@ -166,6 +167,7 @@ class SearchService(BaseService):
                     metadata=metadata,
                     file_path=chunk.document.file_path if chunk.document else None,
                     page_number=chunk.page_number,
+                    storage_path=chunk.document.storage_path if chunk.document else None,
                 )
             )
 

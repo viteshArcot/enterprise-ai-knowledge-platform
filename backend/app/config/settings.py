@@ -140,6 +140,13 @@ class Settings(BaseSettings):
     PROMPT_MAX_TOKENS: int = Field(default=8192, ge=1024)
 
     # =========================================================================
+    # Supabase Storage
+    # =========================================================================
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "enterprise-documents"
+
+    # =========================================================================
     # Reranker
     # =========================================================================
 

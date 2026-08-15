@@ -54,8 +54,13 @@ from collections.abc import AsyncGenerator  # noqa: E402
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
+from app.core.dependencies import get_storage_gateway
 from app.main import app  # noqa: E402
+from app.services.storage import InMemoryStorageGateway
 
+# Share one mock gateway per test session
+_mock_storage = InMemoryStorageGateway()
+app.dependency_overrides[get_storage_gateway] = lambda: _mock_storage
 
 @pytest.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
@@ -68,15 +73,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     """
     try:
         from asgi_lifespan import LifespanManager
-        async with LifespanManager(app):
-            async with AsyncClient(
-                transport=ASGITransport(app=app),
-                base_url="http://test",
-            ) as ac:
-                yield ac
+        async with LifespanManager(app), AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as ac:
+            yield ac
     except ImportError:
         # Fallback if asgi_lifespan not installed: trigger manually
-        from app.database.engine import initialize_database, engine
+        from app.database.engine import engine, initialize_database
         await initialize_database()
         async with AsyncClient(
             transport=ASGITransport(app=app),
