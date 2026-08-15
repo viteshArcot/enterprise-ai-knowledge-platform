@@ -214,6 +214,7 @@ export const Chat: FC = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingTogglesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     return () => {
@@ -387,6 +388,8 @@ export const Chat: FC = () => {
   };
 
   const handleToggleDocument = async (doc: Document) => {
+    if (pendingTogglesRef.current.has(doc.id)) return;
+
     const isAttached = attachedDocs.some(d => d.id === doc.id);
 
     if (isNewChat) {
@@ -397,17 +400,30 @@ export const Chat: FC = () => {
         setAttachedDocs(prev => [...prev, doc]);
       }
     } else {
+      pendingTogglesRef.current.add(doc.id);
+
+      // Optimistic UI update
+      setAttachedDocs(prev => isAttached
+        ? prev.filter(d => d.id !== doc.id)
+        : [...prev, doc]
+      );
+
       // API call to attach/detach
       try {
         if (isAttached) {
           await apiClient.delete(`/api/v1/conversations/${id}/documents/${doc.id}`);
-          setAttachedDocs(prev => prev.filter(d => d.id !== doc.id));
         } else {
           await apiClient.post(`/api/v1/conversations/${id}/documents/${doc.id}`, {});
-          setAttachedDocs(prev => [...prev, doc]);
         }
       } catch (err) {
+        // Rollback
+        setAttachedDocs(prev => isAttached
+          ? [...prev, doc]
+          : prev.filter(d => d.id !== doc.id)
+        );
         toast.error('Failed to update document attachments');
+      } finally {
+        pendingTogglesRef.current.delete(doc.id);
       }
     }
   };

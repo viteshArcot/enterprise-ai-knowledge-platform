@@ -119,6 +119,9 @@ export const apiClient = {
     if (!headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
+    if (!headers.has('Accept')) {
+      headers.set('Accept', 'text/event-stream');
+    }
 
     const response = await fetch(url, {
       method: 'POST',
@@ -141,13 +144,55 @@ export const apiClient = {
     }
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        yield decoder.decode(value, { stream: true });
+
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+
+          let eventType = 'message';
+          const dataLines: string[] = [];
+          const lines = block.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              const rawData = line.slice(5);
+              dataLines.push(rawData.startsWith(' ') ? rawData.slice(1) : rawData);
+            }
+          }
+
+          const data = dataLines.join('\n');
+          if (eventType === 'ready' || eventType === 'done') {
+            // Lifecycle events, safely ignore
+          } else if (eventType === 'error') {
+            let errorMsg = 'Stream error';
+            try {
+              const errObj = JSON.parse(data);
+              errorMsg = errObj.message || errorMsg;
+            } catch {
+              errorMsg = data || errorMsg;
+            }
+            throw createApiError(500, 'Stream Error', errorMsg);
+          } else if (data) {
+            try {
+              const chunk = JSON.parse(data);
+              yield chunk;
+            } catch (e) {
+              console.warn('Failed to parse SSE data chunk as JSON', data);
+            }
+          }
+
+          boundary = buffer.indexOf('\n\n');
+        }
       }
     } finally {
       reader.releaseLock();
