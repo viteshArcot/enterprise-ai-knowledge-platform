@@ -85,6 +85,8 @@ async def detach_document(
 
 
 
+import json
+
 @router.post("/{conversation_id}/messages")
 async def send_message(
     conversation_id: uuid.UUID,
@@ -93,19 +95,26 @@ async def send_message(
 ) -> StreamingResponse:
     """Send a message to a conversation and stream the response."""
 
-    # We yield SSE formatted chunks
     async def sse_stream():
         try:
+            yield "event: ready\ndata: {}\n\n"
             async for chunk in chat_service.stream_chat(conversation_id, request.message, document_ids=request.document_ids):
-                # Replace newlines in chunks with a specific format or just yield data line
-                # For simplicity with basic fetch we can just send the text directly.
-                # But true SSE requires `data: {chunk}\n\n`
-                # For a pure text stream we can just yield the string. The frontend can read the text stream.
-                # Let's yield pure text chunks, making it a simple readable stream on the frontend.
-                yield chunk
+                # Use JSON encoding safely
+                encoded_chunk = json.dumps(chunk)
+                yield f"data: {encoded_chunk}\n\n"
+            yield "event: done\ndata: {}\n\n"
         except Exception as e:
             import structlog
             structlog.get_logger(__name__).error("stream_chat_failed", error=str(e))
-            raise  # Abort chunked transfer so frontend detects failure
+            error_data = json.dumps({"message": str(e)})
+            yield f"event: error\ndata: {error_data}\n\n"
 
-    return StreamingResponse(sse_stream(), media_type="text/plain")
+    return StreamingResponse(
+        sse_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
