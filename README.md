@@ -36,7 +36,7 @@ The retrieval system was then productized into a persistent AI workspace with do
 
 ## Try ASK NOVA
 
-**[Live Demo](INSERT LIVE URL)** · **[Video Demo](INSERT VIDEO URL)** · **[GitHub](INSERT GITHUB URL)**
+**[Live Demo](https://enterprise-ai-knowledge-platform-eight.vercel.app/)** · **[Video Demo](https://www.youtube.com/watch?v=e8FPuHlFqCE)** · **[GitHub](https://github.com/viteshArcot/enterprise-ai-knowledge-platform)**
 
 > [!NOTE]
 > **Deployment note:** The public application runs on cost-conscious/free-tier infrastructure, so the live deployment can occasionally be slower or experience cold starts. The video demo provides a deterministic way to see the complete product without depending on deployment latency.
